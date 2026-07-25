@@ -8,6 +8,8 @@ __pycache__/
 
 # Raw Data Files
 *.csv
+**/Ai files/
+**/Backup/
 
 # Distribution / packaging
 .Python
