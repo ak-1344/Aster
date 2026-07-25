@@ -34,9 +34,27 @@ def _initialize_registry() -> None:
     """Initialize the model registry with baseline algorithms."""
     from sklearn.cluster import DBSCAN, KMeans
 
+    try:
+        from sklearn.cluster import HDBSCAN
+    except ImportError:
+        HDBSCAN = None
+
     def kmeans_factory(n_clusters: int = 3, random_state: int = 42, n_init: int = 10) -> KMeans:
         """Factory function for KMeans clustering."""
         return KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
+
+    def dbscan_factory(eps: float = 0.5, min_samples: int = 5) -> DBSCAN:
+        """Factory function for deterministic DBSCAN clustering."""
+        return DBSCAN(eps=eps, min_samples=min_samples)
+
+    def hdbscan_factory(
+        min_cluster_size: int = 5,
+        min_samples: int | None = None,
+    ) -> Any:
+        """Factory function for sklearn HDBSCAN when supported by the installed version."""
+        if HDBSCAN is None:
+            raise RuntimeError("HDBSCAN is unavailable in the installed scikit-learn version")
+        return HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
 
     register(
         "kmeans",
@@ -51,23 +69,25 @@ def _initialize_registry() -> None:
 
     register(
         "dbscan",
-        lambda: None,
+        dbscan_factory,
         {
             "type": "clustering",
             "algorithm": "DBSCAN",
             "description": "Density-based spatial clustering",
-            "status": "registered_only",
+            "status": "active",
+            "parameters": ["eps", "min_samples"],
         },
     )
 
     register(
         "hdbscan",
-        lambda: None,
+        hdbscan_factory,
         {
             "type": "clustering",
             "algorithm": "HDBSCAN",
             "description": "Hierarchical density-based clustering",
-            "status": "registered_only",
+            "status": "active" if HDBSCAN is not None else "unavailable",
+            "parameters": ["min_cluster_size", "min_samples"],
         },
     )
 
