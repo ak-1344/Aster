@@ -6,6 +6,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def classify_intent(query_context: dict[str, Any]) -> str:
+    """Classify the user query intent into one of: full_workflow, explanation_only, eda_only."""
+    
+    query_text = query_context.get("query", "").lower()
+    
+    explanation_keywords = ["explain", "why", "how", "meaning", "interpret", "understand", "clarify"]
+    eda_keywords = ["explore", "analyze", "summary", "statistics", "describe", "overview", "profile"]
+    
+    has_explanation = any(keyword in query_text for keyword in explanation_keywords)
+    has_eda = any(keyword in query_text for keyword in eda_keywords)
+    
+    if has_explanation and not has_eda:
+        return "explanation_only"
+    if has_eda and not has_explanation:
+        return "eda_only"
+    return "full_workflow"
+
+
 @dataclass(slots=True)
 class PlanStep:
 	"""A single execution step in the planned workflow."""
@@ -84,17 +102,25 @@ def _build_descriptive_steps() -> list[PlanStep]:
 
 def build_execution_plan(context: dict[str, Any]) -> dict[str, Any]:
 	"""Build an executable workflow for the current analytical request."""
-
+	
+	intent_classification = classify_intent(context)
+	
 	intent = context.get("intent", "descriptive")
 	filters = context.get("filters", {})
 
-	if intent == "segmentation":
-		steps = _build_segmentation_steps(int(filters.get("n_clusters", 3)))
-	else:
+	if intent_classification == "explanation_only":
+		steps = []
+	elif intent_classification == "eda_only":
 		steps = _build_descriptive_steps()
+	else:
+		if intent == "segmentation":
+			steps = _build_segmentation_steps(int(filters.get("n_clusters", 3)))
+		else:
+			steps = _build_descriptive_steps()
 
 	return {
 		"intent": intent,
+		"intent_classification": intent_classification,
 		"executable": True,
 		"workflow_name": f"{intent}_workflow",
 		"step_count": len(steps),
