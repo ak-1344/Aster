@@ -1,0 +1,1 @@
+"""ASTER backend smoke tests."""
