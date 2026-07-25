@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
+from typing import Any
 
 import pandas as pd
 
+from backend.app.llm.gemini_client import (
+    GeminiRequestError,
+    GeminiResponseError,
+    GeminiUnavailableError,
+    request_structured_output,
+)
 from backend.app.model_registry import register
 
 
@@ -49,7 +57,110 @@ def _cluster_action_bundle(tier: str) -> dict[str, object]:
     return bundles[tier]
 
 
-def build_recommendations(features: pd.DataFrame, labels: list[int]) -> dict[str, object]:
+def _phrasing_schema() -> dict[str, Any]:
+    """Return the bounded JSON schema for recommendation phrasing."""
+
+    return {
+        "type": "object",
+        "properties": {
+            "cluster_narratives": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "cluster_label": {"type": "integer"},
+                        "narrative": {
+                            "type": "string",
+                            "description": "A concise, human-readable business narrative for this cluster.",
+                        },
+                    },
+                    "required": ["cluster_label", "narrative"],
+                },
+            },
+        },
+        "required": ["cluster_narratives"],
+        "additionalProperties": False,
+    }
+
+
+def _phrasing_prompt(
+    cluster_recommendations: list[dict[str, object]],
+    query_context: dict[str, Any] | None,
+) -> str:
+    """Build a prompt that limits Gemini to phrasing the rule-engine output."""
+
+    query_summary = {
+        "normalized_query": (query_context or {}).get("normalized_query", ""),
+        "intent": (query_context or {}).get("intent", "segmentation"),
+    }
+    return "\n".join(
+        [
+            "You assist ASTER's recommendation node.",
+            "The rule engine has already decided which recommendation applies to which cluster.",
+            "Your only job is to rephrase the provided recommendation output into concise,",
+            "business-friendly narratives. Do not change the tier, action, or cross-sell items.",
+            "Do not invent new recommendations, change cluster assignments, or override the rule engine.",
+            f"Query context: {json.dumps(query_summary, sort_keys=True)}",
+            f"Rule-engine recommendations: {json.dumps(cluster_recommendations, sort_keys=True, default=str)}",
+        ]
+    )
+
+
+def _generate_narratives(
+    cluster_recommendations: list[dict[str, object]],
+    query_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Ask Gemini for human-readable phrasing of rule-engine recommendations.
+
+    Gemini may only generate the human-readable phrasing/reasoning wrapped
+    around the rule output — it never picks the recommendation.
+    """
+
+    try:
+        payload = request_structured_output(
+            _phrasing_prompt(cluster_recommendations, query_context),
+            _phrasing_schema(),
+        )
+        narratives_raw = payload.get("cluster_narratives", [])
+        if not isinstance(narratives_raw, list):
+            raise ValueError("cluster_narratives must be a list")
+
+        narratives: dict[int, str] = {}
+        for entry in narratives_raw:
+            label = entry.get("cluster_label")
+            narrative = entry.get("narrative")
+            if isinstance(label, int) and isinstance(narrative, str) and narrative.strip():
+                narratives[label] = narrative.strip()
+
+        if not narratives:
+            raise ValueError("No valid narratives returned by Gemini")
+
+        return {
+            "narratives": narratives,
+            "path": "llm_assisted",
+            "reasoning": "Gemini rephrased rule-engine recommendations into business narratives.",
+        }
+    except (
+        GeminiUnavailableError,
+        GeminiRequestError,
+        GeminiResponseError,
+        ValueError,
+    ) as error:
+        return {
+            "narratives": {},
+            "path": "rule_based_fallback",
+            "reasoning": (
+                f"Rule-engine messages used as-is because Gemini phrasing was "
+                f"unavailable: {error}"
+            ),
+        }
+
+
+def build_recommendations(
+    features: pd.DataFrame,
+    labels: list[int],
+    query_context: dict[str, Any] | None = None,
+) -> dict[str, object]:
     """Create rule-based recommendations keyed off cluster labels."""
 
     clustered = features.copy().reset_index(drop=True)
@@ -82,6 +193,15 @@ def build_recommendations(features: pd.DataFrame, labels: list[int]) -> dict[str
             }
         )
 
+    # Ask Gemini for human-readable phrasing of the rule-engine output
+    narrative_result = _generate_narratives(cluster_recommendations, query_context)
+    narratives = narrative_result.get("narratives", {})
+
+    # Attach narratives to cluster recommendations
+    for rec in cluster_recommendations:
+        label = rec["cluster_label"]
+        rec["narrative"] = narratives.get(label, rec["message"])
+
     customer_recommendations = []
     for _, row in clustered.iterrows():
         tier = cluster_tiers[int(row["cluster_label"])]
@@ -100,6 +220,7 @@ def build_recommendations(features: pd.DataFrame, labels: list[int]) -> dict[str
         "cluster_tiers": cluster_tiers,
         "tier_counts": {tier: int(count) for tier, count in Counter(cluster_tiers.values()).items()},
         "cluster_profiles": cluster_profiles,
+        "llm_assistance": narrative_result,
     }
 
 
