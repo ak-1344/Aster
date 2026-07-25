@@ -97,23 +97,52 @@
 - [x] Node smoke tests pass
 - [x] Temporary demo path runs end-to-end through the analytical nodes
 
-## 🟡 Current Phase: Phase 4 — Planner (Blocking)
+## ✅ Completed Milestone: Phase 4 — Planner
 
-- [ ] Implement rule-based planner entrypoint in `backend/app/planner/planner.py`
-- [ ] Add query normalization and intent routing in `backend/app/query_manager/query_manager.py`
-- [ ] Add context-building support for planner inputs in `backend/app/context_builder/context_builder.py`
-- [ ] Add planner smoke tests for segmentation and descriptive queries
+- [x] Implement rule-based planner entrypoint in `backend/app/planner/planner.py`
+- [x] Add query normalization and intent routing in `backend/app/query_manager/query_manager.py`
+- [x] Add context-building support for planner inputs in `backend/app/context_builder/context_builder.py`
+- [x] Add planner smoke tests for segmentation and descriptive queries
 
 ### Exit Criteria
 
-- [ ] Planner returns an executable workflow for at least one analytical query
-- [ ] Planner smoke tests pass
-- [ ] Planner uses the Phase 3 analytical nodes as execution targets
+- [x] Planner returns an executable workflow for at least one analytical query
+- [x] Planner smoke tests pass
+- [x] Planner uses the Phase 3 analytical nodes as execution targets
 
-## Backlog — Phase 5 onward
+## ✅ Completed Milestone: Phase 5 — Execution Engine
 
-- [ ] Phase 5 — Execution Engine
-- [ ] Phase 6 — API Layer
+- [x] Implement execution graph data structures in `backend/app/execution_graph/execution_graph.py`
+- [x] Implement scheduler execution in `backend/app/scheduler/scheduler.py`
+- [x] Implement response composition in `backend/app/response_composer/response_composer.py`
+- [x] Add execution-engine smoke tests for workflow assembly and response composition
+
+### Exit Criteria
+
+- [x] Planner output can be consumed by the execution graph and scheduler
+- [x] Execution-engine smoke tests pass
+- [x] Workflow responses combine statistics, recommendations, and visual outputs
+
+## 🟡 Current Phase: Phase 6 — API Layer (Blocking)
+
+- [ ] Implement `POST /upload` endpoint in `backend/app/api/main.py` for dataset upload
+- [ ] Implement `POST /query` endpoint in `backend/app/api/main.py` for natural language analytical requests
+- [ ] Implement `GET /status` endpoint in `backend/app/api/main.py` for system health and execution status
+- [ ] Wire `/query` endpoint through Query Manager → Planner → Execution Graph → Scheduler → Response Composer
+- [ ] Remove or replace temporary `/run-workflow` endpoint (per ISSUE-002)
+- [ ] Add API smoke tests for endpoint validation
+- [ ] Add request/response Pydantic models for type safety
+
+### Exit Criteria
+
+- [ ] `/upload` endpoint accepts and validates dataset files
+- [ ] `/query` endpoint returns structured responses from the execution engine
+- [ ] `/status` endpoint returns system health information
+- [ ] API smoke tests pass
+- [ ] Temporary `/run-workflow` endpoint is removed or replaced with proper API integration
+
+## Backlog — Phase 7 onward
+
 - [ ] Phase 7 — Frontend
 - [ ] Phase 8 — LLM Integration
 - [ ] Phase 9 — Explainability
