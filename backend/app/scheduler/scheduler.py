@@ -39,15 +39,29 @@ def _execute_node(node_name: str, context: dict[str, Any]) -> dict[str, Any]:
                 dataset_path=context.get("dataset_path"),
                 output_path=context.get("output_path"),
             )
+            feature_selection = feature_engineering_node.select_features_to_surface(
+                features_df,
+                context.get("query_context"),
+            )
             context["customer_features"] = features_df
             context["features_path"] = str(output_path)
-            return {"features_path": str(output_path), "row_count": len(features_df)}
+            context["selected_features"] = feature_selection["selected_features"]
+            return {
+                "features_path": str(output_path),
+                "row_count": len(features_df),
+                "selected_features": feature_selection["selected_features"],
+                "llm_assistance": feature_selection,
+            }
         elif node_name == "segmentation":
             features = context.get("customer_features")
             if features is None:
                 raise SchedulerExecutionError("customer_features not found in context for segmentation")
             n_clusters = context.get("n_clusters", 3)
-            result = segmentation_node.segment_customers(features, n_clusters=n_clusters)
+            result = segmentation_node.segment_customers(
+                features,
+                n_clusters=n_clusters,
+                query_context=context.get("query_context"),
+            )
             context["cluster_labels"] = result["labels"]
             context["clustered_customers"] = result["clustered_customers"]
             return result
@@ -62,7 +76,11 @@ def _execute_node(node_name: str, context: dict[str, Any]) -> dict[str, Any]:
             labels = context.get("cluster_labels")
             if features is None or labels is None:
                 raise SchedulerExecutionError("customer_features or cluster_labels not found in context for recommendation")
-            return recommendation_node.build_recommendations(features, labels)
+            return recommendation_node.build_recommendations(
+                features,
+                labels,
+                query_context=context.get("query_context"),
+            )
         elif node_name == "visualization":
             features = context.get("customer_features")
             labels = context.get("cluster_labels")
