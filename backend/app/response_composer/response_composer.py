@@ -10,6 +10,7 @@ def compose_response(
     intent: str,
     intent_classification: str,
     node_outputs: dict[str, Any],
+    explanations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge collected node outputs into a single structured response object.
 
@@ -31,6 +32,7 @@ def compose_response(
         "statistics": {},
         "recommendations": {},
         "visualizations": {},
+        "explanations": explanations or {"customer_explanations": [], "segment_summaries": []},
         "metadata": {
             "nodes_executed": list(node_outputs.keys()),
             "node_count": len(node_outputs),
@@ -81,6 +83,7 @@ def compose_response(
         response["recommendations"] = {
             "cluster_recommendations": rec_output.get("cluster_recommendations"),
             "customer_recommendations": rec_output.get("customer_recommendations"),
+            "cluster_tiers": rec_output.get("cluster_tiers"),
             "tier_counts": rec_output.get("tier_counts"),
         }
 
