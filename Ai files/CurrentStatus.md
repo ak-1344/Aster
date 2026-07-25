@@ -3,14 +3,14 @@
 
 Active Milestone: Phase 4 — Planner (Blocking)
 Last Worked On: 2026-07-25
-Overall Progress: 40%
+Overall Progress: 48%
 
 ## What's Working
 - **Analytical node suite**: Analytics, EDA, segmentation, recommendation, evaluation, and visualization nodes now run against the real CC GENERAL dataset and return reusable outputs.
 - **Feature-engineering workflow**: Customer-level features are generated and persisted to backend/data/processed/customer_features.csv for downstream clustering.
-- **Node smoke tests**: Backend smoke tests exercise each node independently and pass in the current environment.
+- **Node smoke tests**: Backend smoke tests exercise each node independently and pass in the project virtual environment.
+- **Temporary demo path**: A direct `/run-workflow` FastAPI endpoint and a minimal single-page frontend can execute the segmentation workflow end-to-end.
 - **Dataset utilities**: Dataset loading and understanding utilities provide reusable schema, missingness, and identifier summaries.
-- **Documentation**: Dataset understanding and feature engineering docs are present and aligned with the implemented workflow.
 
 ## What's Not Yet Built
 - Phase 4 — Planner.

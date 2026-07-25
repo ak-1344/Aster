@@ -1,7 +1,7 @@
 # 📋 ASTER — ToDo
 
 > Maintained by agent. Updated after every task.
-> Pull phase details from `plan.md`.
+> Pull phase details from plan.md.
 
 ---
 
@@ -78,7 +78,7 @@
 
 ## ✅ Completed Milestone: Phase 3 — Analytical Nodes
 
-- [x] Implement analytics node with descriptive statistics API
+- [x] Implement analytics node with descriptive stats API
 - [x] Expand EDA node outputs for reusable exploratory summaries
 - [x] Connect feature engineering node output into node-level workflow contract
 - [x] Implement segmentation node baseline (KMeans)
@@ -86,6 +86,8 @@
 - [x] Implement evaluation node baseline (silhouette score and cluster size summary)
 - [x] Implement visualization node baseline outputs
 - [x] Add independent node-level smoke tests for each node
+- [x] Add temporary FastAPI workflow endpoint for direct node execution
+- [x] Add temporary frontend demo page for workflow execution
 
 ### Exit Criteria
 
@@ -93,6 +95,7 @@
 - [x] Segmentation output includes cluster labels per customer
 - [x] Evaluation output includes at least one clustering quality metric
 - [x] Node smoke tests pass
+- [x] Temporary demo path runs end-to-end through the analytical nodes
 
 ## 🟡 Current Phase: Phase 4 — Planner (Blocking)
 
