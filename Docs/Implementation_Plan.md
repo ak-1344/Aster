@@ -1,262 +1,169 @@
 # ASTER - Implementation Roadmap
 
-> Version: v0.1
-> Goal: Build a fully working agent first. Optimize and scale later.
->
-> Rule:
-> Every commit must leave ASTER in a runnable state.
+> Version: v0.3
+> Status: Phase 3 completed; Phase 4 planner is the current milestone.
+> Alignment note: this roadmap reflects the repository history and the current working tree rather than the earlier placeholder plan.
 
 ---
 
-# Phase 0 - Project Setup
+## Repository-aligned milestone status
 
-## Goal
-
-Create the project structure.
-
-No AI.
-
-No ML.
-
-No LLM.
-
-No Cache.
-
-No Database.
-
-Just folders and starter files.
-
-### Deliverables
-
-- Backend folder
-- Frontend folder
-- Module structure
-- requirements.txt
-- Empty python files
-- Git repository
+- Phase 0 — Project Setup: completed in the repository scaffold and initial backend package layout.
+- Phase 1 — Dataset Understanding: completed with the dataset loading utility, schema report, and documentation.
+- Phase 2 — Feature Engineering: completed with reusable customer-feature generation and the processed CSV artifact.
+- Phase 3 — Analytical Nodes: completed with runnable analytics, EDA, segmentation, recommendation, evaluation, and visualization nodes.
+- Phase 4 — Planner: current milestone for rule-based routing and workflow selection.
+- Phase 5 onward: execution engine, API layer, frontend, LLM integration, explainability, and advanced features.
 
 ---
 
-# Phase 1 - Core Analytical Nodes
+## Phase 0 - Project Setup
 
-## Goal
+### Status
+Completed.
 
-Implement every analytical node independently.
+### Delivered
+- Backend and frontend package scaffolds
+- Module structure for nodes, planner, scheduler, workflow, and utilities
+- Dependency manifest and environment bootstrap files
+- Initial FastAPI entrypoint and placeholder modules
 
-No orchestration yet.
-
-Each node should accept a DataFrame and return its own output.
-
-### Tasks
-
-- Dataset Loader
-- Analytics Node
-- EDA Node
-- Feature Engineering Node
-- Segmentation Node (KMeans only)
-- Recommendation Node (Rule-based)
-- Evaluation Node
-- Visualization Node
-
-### Output
-
-Each node should work independently.
+### Commit alignment
+The repository history includes the initial scaffold and Phase 0 setup work before the later dataset and feature-engineering milestones.
 
 ---
 
-# Phase 2 - Rule-Based Planner
+## Phase 1 - Dataset Understanding
 
-## Goal
+### Status
+Completed.
 
-Create the first working planner.
+### Delivered
+- Dataset loading and profiling utilities
+- Missing-value, datatype, and identifier analysis
+- Documentation for the selected customer dataset
 
-No LLM.
-
-Hardcoded routing.
-
-### Example
-
-Query
-
-"Segment customers"
-
-↓
-
-Planner
-
-Feature Engineering
-
-↓
-
-Segmentation
-
-↓
-
-Evaluation
-
-↓
-
-Visualization
+### Commit alignment
+This phase was implemented in the repository history around the first dataset-understanding milestone.
 
 ---
 
-Query
+## Phase 2 - Feature Engineering
 
-"Show missing values"
+### Status
+Completed.
 
-↓
+### Delivered
+- Customer-level engineered features
+- Processed feature artifact written to backend/data/processed/customer_features.csv
+- Documentation of engineered features and assumptions
 
-Planner
-
-Analytics
-
-↓
-
-EDA
-
-### Tasks
-
-- Query Analyzer
-- Intent Parser
-- Planner
-- Context Builder
+### Commit alignment
+The current repository history includes the completed feature-engineering milestone and the generated feature dataset.
 
 ---
 
-# Phase 3 - Execution Engine
+## Phase 3 - Analytical Nodes
 
-## Goal
+### Status
+Completed.
 
-Create an execution graph.
+### Delivered
+- Analytics node with descriptive statistics output
+- EDA node with reusable exploratory summaries
+- Segmentation node using a KMeans baseline
+- Recommendation node using simple rule-based ranking
+- Evaluation node reporting silhouette score and cluster sizes
+- Visualization node producing a lightweight scatter payload
+- Node smoke tests covering each analytical component
 
-Planner should no longer directly call nodes.
-
-Instead
-
-Planner
-
-↓
-
-Execution Graph
-
-↓
-
-Scheduler
-
-↓
-
-Nodes
-
-### Tasks
-
-- Workflow Graph
-- Task Scheduler
-- Response Composer
-
-### Output
-
-ASTER can execute different workflows.
+### Execution note
+Each node operates independently and can be exercised against the current customer dataset and generated feature file.
 
 ---
 
-# Phase 4 - API & Frontend
+## Phase 4 - Planner
 
-## Goal
+### Status
+In progress.
 
-Create an actual application.
+### Planned work
+- Implement a rule-based planner entrypoint
+- Normalize user queries into intent and workflow selections
+- Build a lightweight context object from the dataset and engineered features
+- Connect the planner to the Phase 3 node outputs
 
-### Backend
-
-- FastAPI
-- Endpoints
-- Dataset Upload
-- Query API
-
-### Frontend
-
-- Chat Interface
-- Dataset Upload
-- Result Display
-- Charts
-- Segment Visualization
+### Expected outcome
+The planner should be able to route a natural-language request such as “segment customers” into an executable sequence of feature engineering, segmentation, evaluation, and visualization steps.
 
 ---
 
-# Phase 5 - LLM Integration
+## Phase 5 - Execution Engine
 
-## Goal
+### Status
+Planned.
 
-Replace the hardcoded planner.
-
-### LLM Usage
-
-Query
-
-↓
-
-LLM
-
-↓
-
-Intent JSON
-
-↓
-
-Planner
-
-Example
-
-User:
-
-"Show dormant customers"
-
-LLM returns
-
-{
-    "intent": "SEGMENT",
-    "filters": ["Dormant"],
-    "output": "table"
-}
-
-### Tasks
-
-- Gemini API
-- Prompt Engineering
-- Intent Parsing
+### Planned work
+- Introduce an execution graph abstraction
+- Coordinate node execution through a scheduler
+- Compose a response payload for downstream API consumption
 
 ---
 
-# Phase 6 - Explainability
+## Phase 6 - API Layer
 
-## Goal
+### Status
+Planned.
 
-Generate human-readable explanations.
-
-### Pipeline
-
-Execution
-
-↓
-
-SHAP / LIME
-
-↓
-
-LLM
-
-↓
-
-Explanation
-
-### Tasks
-
-- SHAP
-- LIME
-- Decision Engine
+### Planned work
+- Expose FastAPI endpoints for dataset upload and query execution
+- Return structured analytics responses to the frontend layer
 
 ---
 
-# Phase 7 - Architecture Expansion
+## Phase 7 - Frontend
+
+### Status
+Planned.
+
+### Planned work
+- Add a lightweight chat-style interface
+- Display analytical outputs and charts
+- Support basic dataset upload and result rendering
+
+---
+
+## Phase 8 - LLM Integration
+
+### Status
+Planned.
+
+### Planned work
+- Replace or augment the rule-based planner with Gemini-powered intent parsing
+- Keep the analytical core independent from LLM orchestration
+
+---
+
+## Phase 9 - Explainability
+
+### Status
+Planned.
+
+### Planned work
+- Add SHAP or LIME-based explanations for segmentation outputs
+- Produce human-readable summaries for key results
+
+---
+
+## Phase 10 - Advanced Features
+
+### Status
+Planned.
+
+### Planned work
+- Cache execution results
+- Introduce model registry and decision memory concepts
+- Add authentication, session management, and basic metrics
 
 ## Goal
 
