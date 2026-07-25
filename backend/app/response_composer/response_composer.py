@@ -11,6 +11,9 @@ def compose_response(
     intent_classification: str,
     node_outputs: dict[str, Any],
     explanations: dict[str, Any] | None = None,
+    execution_log: list[dict[str, Any]] | None = None,
+    planning_path: str | None = None,
+    planner_reasoning: str | None = None,
 ) -> dict[str, Any]:
     """Merge collected node outputs into a single structured response object.
 
@@ -36,6 +39,10 @@ def compose_response(
         "metadata": {
             "nodes_executed": list(node_outputs.keys()),
             "node_count": len(node_outputs),
+            "planning_path": planning_path,
+            "planner_reasoning": planner_reasoning,
+            "execution_log": list(execution_log or []),
+            "llm_assistance": {},
         },
     }
 
@@ -100,5 +107,17 @@ def compose_response(
         fe_output = node_outputs["feature_engineering"]
         response["metadata"]["features_path"] = fe_output.get("features_path")
         response["metadata"]["feature_row_count"] = fe_output.get("row_count")
+
+    for node_name, node_output in node_outputs.items():
+        llm_assistance = node_output.get("llm_assistance") if isinstance(node_output, dict) else None
+        if isinstance(llm_assistance, dict):
+            response["metadata"]["llm_assistance"][node_name] = llm_assistance
+            response["metadata"]["execution_log"].append(
+                {
+                    "stage": node_name,
+                    "path": llm_assistance.get("path", "deterministic"),
+                    "reason": llm_assistance.get("reason", ""),
+                }
+            )
 
     return response
