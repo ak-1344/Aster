@@ -1,0 +1,3 @@
+"""ASTER API package."""
+
+pass

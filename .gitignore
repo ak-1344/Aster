@@ -155,12 +155,17 @@ activemq-data/
 # Environments
 .env
 .envrc
+*.env
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Node
+node_modules/
+.next/
 
 # Spyder project settings
 .spyderproject
