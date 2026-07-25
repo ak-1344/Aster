@@ -7,7 +7,9 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
+from backend.app.query_manager.query_manager import execute_query
 from backend.app.nodes.analytics_node import build_descriptive_statistics
 from backend.app.nodes.eda_node import build_exploratory_summary
 from backend.app.nodes.evaluation_node import evaluate_segmentation
@@ -18,6 +20,17 @@ from backend.app.nodes.visualization_node import build_visualization_payload
 
 
 app = FastAPI(title="ASTER")
+
+
+class QueryRequest(BaseModel):
+	query: str = Field(..., min_length=1, description="Natural-language analytical query")
+
+
+@app.post("/query")
+def post_query(body: QueryRequest) -> dict[str, Any]:
+	"""Run the canonical pipeline for a natural-language query."""
+
+	return execute_query(body.query)
 
 
 def _frontend_html() -> str:
@@ -35,7 +48,11 @@ def root() -> HTMLResponse:
 
 @app.post("/run-workflow")
 def run_workflow() -> dict[str, Any]:
-	"""TEMP - Phase 4/5 will replace this with Planner+Scheduler."""
+	"""FALLBACK DEMO PATH (ISSUE-002): direct node bypass for local demos.
+
+	Canonical workflow execution is POST /query via Query Manager and Scheduler.
+	Kept intentionally during hackathon time-box; do not extend this bypass.
+	"""
 
 	dataset_path = Path("backend/data/raw/CC GENERAL.csv")
 	feature_path = Path("backend/data/processed/customer_features.csv")
