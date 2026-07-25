@@ -30,7 +30,7 @@
 
 
 CUST_ID : Identification of Credit Card holder (Categorical)
-BALANCE : Balance amount left in their account to make purchases (
+BALANCE : Balance amount left in their account to make purchases
 BALANCE_FREQUENCY : How frequently the Balance is updated, score between 0 and 1 (1 = frequently updated, 0 = not frequently updated)
 PURCHASES : Amount of purchases made from account
 ONEOFF_PURCHASES : Maximum purchase amount done in one-go
