@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ASTER Segmentation Demo</title>
+  <title>ASTER — Customer Segmentation Demo</title>
   <style>
     :root {
       color-scheme: light;
@@ -12,7 +12,6 @@
       --ink: #10222e;
       --muted: #60707d;
       --accent: #0e6f66;
-      --accent-2: #b85c38;
       --border: rgba(16, 34, 46, 0.12);
       --shadow: 0 18px 60px rgba(16, 34, 46, 0.10);
     }
@@ -20,178 +19,206 @@
     body {
       margin: 0;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(14, 111, 102, 0.18), transparent 26%),
-        radial-gradient(circle at top right, rgba(184, 92, 56, 0.16), transparent 24%),
-        linear-gradient(180deg, #fbf7f0 0%, #efe6d8 100%);
+      background: linear-gradient(180deg, #fbf7f0 0%, #efe6d8 100%);
       color: var(--ink);
       min-height: 100vh;
-      padding: 32px;
+      padding: 24px;
     }
-    .shell {
-      max-width: 1180px;
-      margin: 0 auto;
-      display: grid;
-      gap: 20px;
-    }
+    .shell { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
     .hero, .panel {
-      background: rgba(255, 250, 242, 0.84);
+      background: rgba(255, 250, 242, 0.9);
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: 20px;
       box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
+      padding: 22px;
     }
-    .hero { padding: 28px; display: grid; gap: 14px; }
-    h1 { margin: 0; font-size: clamp(2rem, 3vw, 3.6rem); letter-spacing: -0.05em; }
-    p { margin: 0; line-height: 1.55; color: var(--muted); }
-    .grid {
-      display: grid;
-      gap: 20px;
-      grid-template-columns: 340px 1fr;
-      align-items: start;
+    h1, h2 { margin: 0 0 10px; }
+    p, .notice { margin: 0; color: var(--muted); line-height: 1.5; }
+    .query-row { display: grid; gap: 10px; grid-template-columns: 1fr auto; margin-top: 14px; }
+    input, button {
+      font: inherit;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
     }
-    .panel { padding: 22px; }
-    .status {
-      display: grid;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .status-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .status-row:last-child { border-bottom: 0; }
-    .label { color: var(--muted); font-size: 0.92rem; }
-    .value { font-weight: 650; text-align: right; }
+    input { width: 100%; background: white; }
     button {
-      appearance: none;
-      border: 0;
       background: linear-gradient(135deg, var(--accent), #084d49);
       color: white;
-      border-radius: 14px;
-      padding: 14px 18px;
+      border: 0;
       font-weight: 700;
       cursor: pointer;
-      width: 100%;
-      font-size: 1rem;
-      box-shadow: 0 12px 28px rgba(14, 111, 102, 0.22);
+      min-width: 120px;
     }
     button:disabled { opacity: 0.7; cursor: wait; }
-    .results { display: grid; gap: 18px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
     .card {
-      background: rgba(255, 255, 255, 0.58);
+      background: rgba(255,255,255,0.65);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 18px;
+      border-radius: 14px;
+      padding: 14px;
     }
-    table { width: 100%; border-collapse: collapse; }
-    th, td {
-      text-align: left;
-      padding: 10px 8px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-    th { font-size: 0.83rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-    .metric { font-size: 2rem; font-weight: 800; color: var(--accent); }
-    .subgrid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .mono { font-variant-numeric: tabular-nums; }
-    .notice { font-size: 0.92rem; color: var(--muted); }
-    @media (max-width: 960px) {
-      body { padding: 18px; }
-      .grid, .subgrid { grid-template-columns: 1fr; }
-    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .metric { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+    pre { white-space: pre-wrap; word-break: break-word; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid var(--border); font-size: 0.85rem; }
+    .scatter-wrap { display: grid; gap: 6px; }
+    .dot-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); }
   </style>
 </head>
 <body>
   <main class="shell">
     <section class="hero">
-      <div class="notice">TEMP demo path for Phase 3. Phase 4/5 will replace the backend invocation with Planner + Scheduler.</div>
-      <h1>ASTER Segmentation Workflow</h1>
-      <p>Run the analytical nodes directly against the customer feature dataset and inspect clusters, recommendations, and evaluation metrics in one place.</p>
+      <p class="notice">Canonical path: POST /query through Planner + Scheduler. Legacy bypass: POST /run-workflow (ISSUE-002 fallback).</p>
+      <h1>ASTER — Retail Banking Segmentation Agent</h1>
+      <p>Ask a natural-language question about customer behaviour. ASTER plans and executes the analytical workflow, then returns segments, recommendations, and rule-based explanations.</p>
+      <div class="query-row">
+        <input id="query-input" type="text" value="segment customers into 3 clusters" placeholder="e.g. segment customers into 3 clusters" />
+        <button id="run-button">Run Query</button>
+      </div>
+      <p id="status-line" class="notice" style="margin-top:10px;">Ready.</p>
     </section>
 
     <section class="grid">
-      <aside class="panel">
-        <h2>Dataset Status</h2>
-        <div class="status" id="dataset-status">
-          <div class="status-row"><span class="label">Dataset</span><span class="value mono">backend/data/raw/CC GENERAL.csv</span></div>
-          <div class="status-row"><span class="label">Feature output</span><span class="value mono">backend/data/processed/customer_features.csv</span></div>
-          <div class="status-row"><span class="label">Workflow</span><span class="value">Idle</span></div>
-        </div>
-        <button id="run-button">Run Segmentation Workflow</button>
-      </aside>
+      <div class="panel">
+        <h2>Workflow</h2>
+        <div id="workflow-meta" class="notice">No query run yet.</div>
+      </div>
+      <div class="panel">
+        <h2>Evaluation</h2>
+        <div class="metric" id="silhouette-score">--</div>
+        <p class="notice">Silhouette score (segmentation queries only).</p>
+      </div>
+    </section>
 
-      <section class="results">
-        <div class="card">
-          <h2>Evaluation</h2>
-          <div class="metric mono" id="silhouette-score">--</div>
-          <div class="notice">Silhouette score for the current clustering run.</div>
-        </div>
+    <section class="panel">
+      <h2>Segment Personas</h2>
+      <div id="segment-summaries" class="notice">No segment summaries yet.</div>
+    </section>
 
-        <div class="subgrid">
-          <div class="card">
-            <h2>Cluster Summary</h2>
-            <div id="cluster-summary" class="notice">No workflow run yet.</div>
-          </div>
-          <div class="card">
-            <h2>Cluster Recommendations</h2>
-            <div id="recommendations" class="notice">No workflow run yet.</div>
-          </div>
-        </div>
+    <section class="panel">
+      <h2>Cluster Recommendations</h2>
+      <div id="recommendations" class="notice">No recommendations yet.</div>
+    </section>
 
-        <div class="card">
-          <h2>Cluster Table</h2>
-          <div id="cluster-table" class="notice">No workflow run yet.</div>
-        </div>
-      </section>
+    <section class="panel">
+      <h2>Customer Explanations</h2>
+      <div id="explanations" class="notice">No explanations yet.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Cluster Table</h2>
+      <div id="cluster-table" class="notice">No cluster table yet.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Charts / Tables</h2>
+      <div id="visualizations" class="notice">No visualization payload yet.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Statistics</h2>
+      <pre id="statistics">No statistics yet.</pre>
     </section>
   </main>
 
   <script>
+    const queryInput = document.getElementById('query-input');
     const runButton = document.getElementById('run-button');
+    const statusLine = document.getElementById('status-line');
+    const workflowMeta = document.getElementById('workflow-meta');
     const silhouetteScore = document.getElementById('silhouette-score');
-    const clusterSummary = document.getElementById('cluster-summary');
+    const segmentSummaries = document.getElementById('segment-summaries');
     const recommendations = document.getElementById('recommendations');
+    const explanations = document.getElementById('explanations');
     const clusterTable = document.getElementById('cluster-table');
-    const datasetStatus = document.getElementById('dataset-status');
+    const visualizations = document.getElementById('visualizations');
+    const statistics = document.getElementById('statistics');
 
     function renderTable(rows) {
-      if (!rows || !rows.length) {
-        return '<div class="notice">No cluster data returned.</div>';
-      }
+      if (!rows || !rows.length) return '<div class="notice">No rows.</div>';
       const headers = Object.keys(rows[0]);
-      const head = '<tr>' + headers.map((header) => `<th>${header}</th>`).join('') + '</tr>';
-      const body = rows.map((row) => '<tr>' + headers.map((header) => `<td>${row[header]}</td>`).join('') + '</tr>').join('');
+      const head = '<tr>' + headers.map((h) => `<th>${h}</th>`).join('') + '</tr>';
+      const body = rows.map((row) => '<tr>' + headers.map((h) => `<td>${row[h] ?? ''}</td>`).join('') + '</tr>').join('');
       return `<table>${head}${body}</table>`;
     }
 
-    runButton.addEventListener('click', async () => {
+    function renderVisualizations(viz) {
+      if (!viz || (!viz.scatter && !viz.cluster_size_bar)) {
+        return '<div class="notice">No chart data for this query.</div>';
+      }
+      const parts = [];
+      if (viz.scatter) {
+        const sample = (viz.scatter.data || []).slice(0, 12);
+        parts.push(`<div class="card"><strong>${viz.scatter.title}</strong><div class="dot-row">${sample.map((d) => `C${d.customer_id}: (${d.x}, ${d.y}) → seg ${d.cluster_label}`).join(' | ')}</div></div>`);
+      }
+      if (viz.cluster_size_bar) {
+        parts.push(`<div class="card">${renderTable(viz.cluster_size_bar.data || [])}</div>`);
+      }
+      return parts.join('');
+    }
+
+    function buildClusterTable(payload) {
+      const recs = payload.recommendations?.customer_recommendations || [];
+      const lookup = Object.fromEntries(recs.map((r) => [r.customer_id, r.primary_recommendation]));
+      const tiers = payload.recommendations?.cluster_tiers || {};
+      const explanationsByCustomer = Object.fromEntries(
+        (payload.explanations?.customer_explanations || []).map((e) => [e.customer_id, e.explanation])
+      );
+      const seg = payload.summary?.segmentation;
+      if (!seg) return [];
+
+      const rows = (payload.explanations?.customer_explanations || []).slice(0, 25).map((item) => ({
+        customer_id: item.customer_id,
+        cluster_label: item.cluster_label,
+        tier: tiers[item.cluster_label] ?? '',
+        primary_recommendation: lookup[item.customer_id] ?? '',
+        explanation: explanationsByCustomer[item.customer_id] ?? item.explanation,
+      }));
+      return rows;
+    }
+
+    async function runQuery() {
+      const query = queryInput.value.trim();
+      if (!query) return;
+
       runButton.disabled = true;
-      runButton.textContent = 'Running...';
-      datasetStatus.querySelector('.status-row:last-child .value').textContent = 'Running';
+      statusLine.textContent = 'Running POST /query ...';
 
       try {
-        const response = await fetch('/run-workflow', { method: 'POST' });
+        const response = await fetch('/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
         const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Query failed');
 
-        silhouetteScore.textContent = payload.evaluation.silhouette_score ?? 'N/A';
-        clusterSummary.innerHTML = renderTable(payload.evaluation_clusters);
-        recommendations.innerHTML = renderTable(payload.cluster_recommendations);
-        clusterTable.innerHTML = renderTable(payload.cluster_table);
-        datasetStatus.querySelector('.status-row:last-child .value').textContent = 'Ready';
+        workflowMeta.innerHTML = `
+          <div><strong>Workflow:</strong> ${payload.workflow_name}</div>
+          <div><strong>Intent:</strong> ${payload.intent}</div>
+          <div><strong>Nodes:</strong> ${(payload.metadata?.nodes_executed || []).join(', ')}</div>
+        `;
+
+        silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive query)';
+        segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
+        recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
+        explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
+        clusterTable.innerHTML = renderTable(buildClusterTable(payload));
+        visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
+        statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
+        statusLine.textContent = 'Done.';
       } catch (error) {
-        datasetStatus.querySelector('.status-row:last-child .value').textContent = 'Error';
-        silhouetteScore.textContent = 'Error';
-        clusterSummary.textContent = error.message;
-        recommendations.textContent = error.message;
-        clusterTable.textContent = error.message;
+        statusLine.textContent = `Error: ${error.message}`;
       } finally {
         runButton.disabled = false;
-        runButton.textContent = 'Run Segmentation Workflow';
       }
+    }
+
+    runButton.addEventListener('click', runQuery);
+    queryInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') runQuery();
     });
   </script>
 </body>
