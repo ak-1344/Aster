@@ -38,11 +38,27 @@ def _load_environment() -> None:
     load_dotenv()
 
 
+def _configured_timeout(timeout_seconds: int | None) -> int:
+    """Resolve an explicit timeout or the optional environment configuration."""
+
+    if timeout_seconds is not None:
+        return timeout_seconds
+
+    configured_timeout = os.getenv("GEMINI_TIMEOUT_SECONDS")
+    if not configured_timeout:
+        return DEFAULT_TIMEOUT_SECONDS
+
+    try:
+        return int(configured_timeout)
+    except ValueError:
+        return DEFAULT_TIMEOUT_SECONDS
+
+
 def request_structured_output(
     prompt: str,
     response_schema: dict[str, Any],
     *,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    timeout_seconds: int | None = None,
     model_name: str | None = None,
 ) -> dict[str, Any]:
     """Request a JSON object from Gemini within a fixed client-side timeout.
@@ -52,7 +68,8 @@ def request_structured_output(
     the analytical pipeline.
     """
 
-    if timeout_seconds <= 0:
+    resolved_timeout_seconds = _configured_timeout(timeout_seconds)
+    if resolved_timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be greater than zero")
 
     _load_environment()
@@ -71,7 +88,7 @@ def request_structured_output(
     try:
         client = genai.Client(
             api_key=api_key,
-            http_options={"timeout": timeout_seconds * 1000},
+            http_options={"timeout": resolved_timeout_seconds * 1000},
         )
         response = client.models.generate_content(
             model=model_name or os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
