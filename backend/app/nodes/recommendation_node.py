@@ -6,6 +6,8 @@ from collections import Counter
 
 import pandas as pd
 
+from backend.app.model_registry import register
+
 
 def _tier_from_cluster_profile(cluster_frame: pd.DataFrame) -> str:
     """Map a cluster profile to a business tier."""
@@ -99,3 +101,20 @@ def build_recommendations(features: pd.DataFrame, labels: list[int]) -> dict[str
         "tier_counts": {tier: int(count) for tier, count in Counter(cluster_tiers.values()).items()},
         "cluster_profiles": cluster_profiles,
     }
+
+
+def _register_rule_engine() -> None:
+    """Register the rule-based recommendation engine in the model registry."""
+    register(
+        "rule_engine",
+        build_recommendations,
+        {
+            "type": "recommendation",
+            "algorithm": "RuleEngine",
+            "description": "Rule-based recommendation engine for customer segments",
+            "status": "active",
+        },
+    )
+
+
+_register_rule_engine()

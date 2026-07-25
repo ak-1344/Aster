@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from sklearn.cluster import KMeans
+
+from backend.app.model_registry import get
 
 
 def segment_customers(features: pd.DataFrame, n_clusters: int = 3) -> dict[str, Any]:
@@ -13,7 +14,10 @@ def segment_customers(features: pd.DataFrame, n_clusters: int = 3) -> dict[str, 
 
     feature_columns = [column for column in features.columns if column != "CUST_ID"]
     matrix = features[feature_columns].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-    model = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    kmeans_factory = get("kmeans")
+    if kmeans_factory is None:
+        raise RuntimeError("KMeans factory not found in model registry")
+    model = kmeans_factory(n_clusters=n_clusters, random_state=42, n_init=10)
     labels = model.fit_predict(matrix)
 
     clustered = features.copy().reset_index(drop=True)
