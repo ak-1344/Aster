@@ -224,6 +224,28 @@
       `;
     }
 
+    async function fetchRecentQueries() {
+      try {
+        const res = await fetch('/dashboard/queries');
+        const data = await res.json();
+        
+        data.forEach(row => {
+          if (!recentQueries[row.id]) {
+            recentQueries[row.id] = {
+              id: String(row.id),
+              timestamp: new Date(row.created_at).getTime(),
+              timestamp_str: new Date(row.created_at).toLocaleTimeString(),
+              workflow_name: row.query_text || row.chosen_algorithm || 'historical',
+              status: row.cache_hit ? 'cache hit' : 'success'
+            };
+          }
+        });
+        renderQueriesTable();
+      } catch (err) {
+        document.getElementById('recent-queries-table').innerHTML = `<div class="notice">Failed to load queries: ${err.message}</div>`;
+      }
+    }
+
     async function fetchNodeStats() {
       try {
         const res = await fetch('/dashboard/node-stats');
@@ -435,7 +457,7 @@
     }
 
     // Initial load
-    renderQueriesTable();
+    fetchRecentQueries();
     fetchNodeStats();
     initWebSocket();
   </script>
