@@ -51,7 +51,7 @@ python scripts/bootstrap_sample_data.py
 *(This writes a synthetic `CC GENERAL.csv` directly into `backend/data/raw/`)*
 
 **Option B: Manual Placement (For real analytics)**
-Download the `CC GENERAL.csv` from the [UCI ML Repository](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients) and place it exactly at:
+Download the `CC GENERAL.csv` from [Kaggle — Credit Card Dataset for Clustering](https://www.kaggle.com/datasets/arjunbhasin2013/ccdata) and place it exactly at:
 `backend/data/raw/CC GENERAL.csv`
 
 ---

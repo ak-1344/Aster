@@ -49,7 +49,7 @@ To run ASTER locally, you can choose between two dataset provisioning methods:
 1. **Synthetic Bootstrap Script (Recommended for testing):**
    Run `python scripts/bootstrap_sample_data.py` to generate a 120-row, schema-compatible synthetic CSV at `backend/data/raw/CC GENERAL.csv` using `numpy.random`.
 2. **Real Dataset Placement (For production analytics):**
-   Download the original dataset from the UCI Machine Learning Repository and save it to `backend/data/raw/CC GENERAL.csv`.
+   Download the original `CC GENERAL.csv` dataset from [Kaggle — Credit Card Dataset for Clustering](https://www.kaggle.com/datasets/arjunbhasin2013/ccdata) and save it to `backend/data/raw/CC GENERAL.csv`.
 
 ### Custom Dataset Ingestion (`POST /upload`)
 ASTER includes an automated data ingestion and feature engineering endpoint (`POST /upload`). Users can upload any custom CSV file via `multipart/form-data`. The system:
@@ -248,11 +248,10 @@ In compliance with hackathon regulations regarding external tool disclosure:
 ## 📚 Data Sources & Citation
 
 ### Credit Card Customers (CC GENERAL) Dataset
-* **Dataset Title:** Credit Card Dataset for Data Mining / Default of Credit Card Clients
-* **Source Repository:** [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)
-* **Citation:** 
-  > Yeh, I. C., & Lien, C. H. (2009). The comparisons of data mining techniques for the predictive accuracy of probability of default of credit card customers. *Expert Systems with Applications*, 36(2), 2473-2480.
-* **License & Usage:** Public Domain / Available for academic, research, and technical demonstration purposes.
+* **Dataset Title:** Credit Card Dataset for Clustering (`CC GENERAL.csv`)
+* **Source Repository:** [Kaggle — arjunbhasin2013/ccdata](https://www.kaggle.com/datasets/arjunbhasin2013/ccdata)
+* **Author / Publisher:** Arjun Bhasin (Kaggle)
+* **License & Usage:** CC0: Public Domain (Open data for commercial, research, and demonstration purposes).
 
 ---
 
