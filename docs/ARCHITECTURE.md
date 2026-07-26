@@ -71,11 +71,7 @@ The system is built on the principle that every module should have a single resp
 
 ### 5. Context Builder & Filter Validator
 *   **Takes as input:** Normalised query text and dataset schema metadata.
-<<<<<<< HEAD
-*   **Produces:** Structured context object containing extracted intent (TF-IDF cosine similarity over canonical example phrases, with legacy keyword lists retained but deprecated), requested cluster counts, target entities, `intent_routing` metadata (matched example + similarity score), and a list of `unsupported_filters` (search constraints not present in the dataset schema). May return a clarification payload when the query is too vague, relies only on unsupported filters, or uses ambiguous relative thresholds.
-=======
-*   **Produces:** Structured context object containing extracted intent, requested cluster counts, target entities, and a list of `unsupported_filters` (search constraints not present in the dataset schema).
->>>>>>> b9bffd4ea829bca965a488417059c71d8463c11c
+*   **Produces:** Structured context object. It acts as a **clarification decision point**, detecting ambiguous queries (e.g., missing thresholds, unsupported filter-only) and returning a `clarification_needed` payload to pause execution and request human-in-the-loop clarification instead of guessing. For resolvable queries, it relies on a **3-tier routing strategy**: Gemini serves as the primary planner (in the downstream Planner module), but the Context Builder prepares intent using offline Scikit-learn TF-IDF semantic similarity routing, falling back to regex entity lookup (e.g. `CUST_ID`) for direct explanation routes. It also extracts requested cluster counts, target entities, and a list of `unsupported_filters`.
 *   **Critically DOES NOT:** Plan the execution graph.
 
 ### 6. Planner
