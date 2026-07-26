@@ -111,8 +111,73 @@
     .data-number { font-family: var(--font-data); }
     .scatter-wrap { display: grid; gap: 6px; }
     .dot-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); font-family: var(--font-data); }
+    .node-chip-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .node-chip {
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-family: var(--font-data);
+      font-size: 0.82rem;
+      color: var(--accent);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+    }
 
-  
+    .chain-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .chain-arrow { color: var(--muted); font-family: var(--font-data); }
+
+    .markdown-body {
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .markdown-body > *:first-child { margin-top: 0; }
+    .markdown-body > *:last-child { margin-bottom: 0; }
+    .markdown-body h1,
+    .markdown-body h2,
+    .markdown-body h3 {
+      margin: 1.25em 0 0.55em;
+      color: var(--accent);
+      font-family: var(--font-display);
+    }
+    .markdown-body h2 { font-size: 1.2rem; }
+    .markdown-body h3 { font-size: 1.05rem; }
+    .markdown-body p { margin: 0.65em 0; color: var(--ink); }
+    .markdown-body ul,
+    .markdown-body ol {
+      margin: 0.55em 0 0.85em;
+      padding-left: 1.35rem;
+      color: var(--ink);
+    }
+    .markdown-body li { margin: 0.3em 0; }
+    .markdown-body code {
+      font-family: var(--font-data);
+      font-size: 0.88em;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      padding: 0.1em 0.35em;
+    }
+    .markdown-body table {
+      margin: 0.85em 0 1.1em;
+      background: rgba(255, 255, 255, 0.45);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .markdown-body th {
+      background: rgba(10, 92, 85, 0.08);
+    }
+    .markdown-body td {
+      font-family: var(--font-data);
+      font-size: 0.86rem;
+    }
+    .markdown-body strong { color: var(--ink); }
+
     @media (prefers-reduced-motion: reduce) {
       .glass-token.running { animation: none; }
       .node-inprogress { animation: none; }
@@ -131,12 +196,25 @@
         <button id="run-button" class="neu-button">Run Query</button>
       </div>
       <p id="status-line" class="notice" style="margin-top:10px;">Ready.</p>
+      <div id="clarification-panel" class="glass-panel" style="display: none; margin-top: 16px;">
+        <h2>Clarification Needed</h2>
+        <p id="clarification-question" class="notice"></p>
+        <div class="query-row" style="margin-top: 12px; grid-template-columns: 1fr auto;">
+          <input id="clarification-input" type="text" class="neu-inset" placeholder="Type your clarification..." />
+          <button id="clarification-submit" class="neu-button">Submit</button>
+        </div>
+      </div>
       <div id="unsupported-filters-notice" class="notice" style="display: none; color: #b73a3a; margin-top: 10px; font-weight: bold; padding: 10px; background: rgba(183, 58, 58, 0.1); border-radius: 8px;"></div>
     </section>
 
     <section class="panel neu-surface" id="live-chain-panel" style="display: none;">
       <h2>Live Execution</h2>
       <div class="chain-container" id="execution-chain"></div>
+    </section>
+
+    <section class="glass-panel" id="agent-answer-panel">
+      <h2>Agent Answer</h2>
+      <div id="agent-answer" class="markdown-body notice">No answer yet.</div>
     </section>
 
     <section class="grid">
@@ -182,6 +260,7 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script>
     const queryInput = document.getElementById('query-input');
     const runButton = document.getElementById('run-button');
@@ -194,7 +273,120 @@
     const clusterTable = document.getElementById('cluster-table');
     const visualizations = document.getElementById('visualizations');
     const statistics = document.getElementById('statistics');
+    const agentAnswer = document.getElementById('agent-answer');
     const unsupportedFiltersNotice = document.getElementById('unsupported-filters-notice');
+    const clarificationPanel = document.getElementById('clarification-panel');
+    const clarificationQuestion = document.getElementById('clarification-question');
+    const clarificationInput = document.getElementById('clarification-input');
+    const clarificationSubmit = document.getElementById('clarification-submit');
+
+    let pendingOriginalQuery = null;
+
+    if (window.marked) {
+      marked.setOptions({
+        gfm: true,
+        breaks: true,
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderMarkdown(markdown) {
+      const source = (markdown || '').trim();
+      if (!source) {
+        return '<div class="notice">No formatted answer available.</div>';
+      }
+      if (window.marked && typeof marked.parse === 'function') {
+        return marked.parse(source);
+      }
+      return `<pre>${escapeHtml(source)}</pre>`;
+    }
+
+    function renderAgentAnswer(payload) {
+      const markdown = payload.answer_markdown || payload.agent_answer?.markdown || '';
+      agentAnswer.classList.remove('notice');
+      agentAnswer.classList.add('markdown-body');
+      if (!markdown) {
+        agentAnswer.classList.add('notice');
+        agentAnswer.innerHTML = 'No formatted answer available.';
+        return;
+      }
+      agentAnswer.innerHTML = renderMarkdown(markdown);
+    }
+
+    function hideClarificationPanel() {
+      clarificationPanel.style.display = 'none';
+      pendingOriginalQuery = null;
+      clarificationInput.value = '';
+    }
+
+    function showClarificationPanel(payload) {
+      pendingOriginalQuery = payload.original_query || queryInput.value.trim();
+      clarificationQuestion.textContent = payload.question || 'Please provide more detail.';
+      clarificationInput.value = '';
+      clarificationPanel.style.display = 'block';
+      workflowMeta.textContent = 'Waiting for clarification.';
+      segmentSummaries.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
+      recommendations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
+      explanations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
+      clusterTable.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
+      visualizations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
+      statistics.textContent = 'No statistics yet.';
+      agentAnswer.classList.add('notice');
+      agentAnswer.innerHTML = 'Clarification required before results can be shown.';
+      silhouetteScore.textContent = '--';
+      unsupportedFiltersNotice.style.display = 'none';
+    }
+
+    function renderNodeChips(nodes) {
+      if (!nodes || !nodes.length) {
+        return '<div class="notice">No nodes executed.</div>';
+      }
+      return `<div class="node-chip-list">${nodes.map((node) => `<span class="node-chip">${node}</span>`).join('')}</div>`;
+    }
+
+    function renderQueryResults(payload) {
+      hideClarificationPanel();
+
+      if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
+        const names = payload.unsupported_filters.map(f => f.requested).join(', ');
+        unsupportedFiltersNotice.style.display = 'block';
+        unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
+      } else {
+        unsupportedFiltersNotice.style.display = 'none';
+      }
+
+      const nodesExecuted = payload.metadata?.nodes_executed || [];
+      const toolsInvoked = payload.metadata?.tools_invoked || payload.agent_answer?.tools_invoked || [];
+      workflowMeta.innerHTML = `
+        <div><strong>Workflow:</strong> ${payload.workflow_name || 'N/A'}</div>
+        <div><strong>Intent:</strong> ${payload.intent || 'N/A'}</div>
+        <div><strong>Planning path:</strong> ${payload.metadata?.planning_path || 'N/A'}</div>
+        <div><strong>Tools invoked:</strong> ${(toolsInvoked.length ? toolsInvoked.join(', ') : 'none')}</div>
+        <div><strong>Nodes executed:</strong></div>
+        ${renderNodeChips(nodesExecuted)}
+      `;
+
+      renderAgentAnswer(payload);
+      silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive query)';
+      segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
+      recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
+      explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
+      clusterTable.innerHTML = renderTable(
+        (payload.agent_answer?.target_customers && payload.agent_answer.target_customers.length)
+          ? payload.agent_answer.target_customers
+          : buildClusterTable(payload)
+      );
+      visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
+      statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
+    }
 
     function renderTable(rows) {
       if (!rows || !rows.length) return '<div class="notice">No rows.</div>';
@@ -302,50 +494,42 @@
     }
     initWebSocket();
 
-    async function runQuery() {
-      const query = queryInput.value.trim();
+    async function runQuery(options = {}) {
+      const query = options.query ?? queryInput.value.trim();
+      const clarificationResponse = options.clarificationResponse ?? null;
       if (!query) return;
 
-      
       runButton.disabled = true;
-      statusLine.textContent = 'Running POST /query ...';
-      
+      statusLine.textContent = clarificationResponse
+        ? 'Resubmitting with clarification...'
+        : 'Running POST /query ...';
+
       activeQueryId = null;
       nodesState = [];
       liveChainPanel.style.display = 'none';
       executionChain.innerHTML = '';
 
-
       try {
+        const requestBody = { query };
+        if (clarificationResponse) {
+          requestBody.clarification_response = clarificationResponse;
+        }
+
         const response = await fetch('/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify(requestBody),
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || 'Query failed');
 
-        if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
-          const names = payload.unsupported_filters.map(f => f.requested).join(', ');
-          unsupportedFiltersNotice.style.display = 'block';
-          unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
-        } else {
-          unsupportedFiltersNotice.style.display = 'none';
+        if (payload.status === 'clarification_needed') {
+          showClarificationPanel(payload);
+          statusLine.textContent = 'Clarification needed.';
+          return;
         }
 
-        workflowMeta.innerHTML = `
-          <div><strong>Workflow:</strong> ${payload.workflow_name}</div>
-          <div><strong>Intent:</strong> ${payload.intent}</div>
-          <div><strong>Nodes:</strong> ${(payload.metadata?.nodes_executed || []).join(', ')}</div>
-        `;
-
-        silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive or lookup query)';
-        segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
-        recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
-        explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
-        clusterTable.innerHTML = payload.results ? renderTable(payload.results) : renderTable(buildClusterTable(payload));
-        visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
-        statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
+        renderQueryResults(payload);
         statusLine.textContent = 'Done.';
       } catch (error) {
         statusLine.textContent = `Error: ${error.message}`;
@@ -354,7 +538,20 @@
       }
     }
 
-    runButton.addEventListener('click', runQuery);
+    async function submitClarification() {
+      const clarificationResponse = clarificationInput.value.trim();
+      if (!pendingOriginalQuery || !clarificationResponse) return;
+      await runQuery({
+        query: pendingOriginalQuery,
+        clarificationResponse,
+      });
+    }
+
+    runButton.addEventListener('click', () => runQuery());
+    clarificationSubmit.addEventListener('click', submitClarification);
+    clarificationInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submitClarification();
+    });
     queryInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') runQuery();
     });
