@@ -128,6 +128,11 @@
       <div id="unsupported-filters-notice" class="notice" style="display: none; color: #b73a3a; margin-top: 10px; font-weight: bold; padding: 10px; background: rgba(183, 58, 58, 0.1); border-radius: 8px;"></div>
     </section>
 
+    <section class="panel neu-surface" id="live-chain-panel" style="display: none;">
+      <h2>Live Execution</h2>
+      <div class="chain-container" id="execution-chain"></div>
+    </section>
+
     <section class="grid">
       <div class="panel">
         <h2>Workflow</h2>
@@ -228,12 +233,74 @@
       return rows;
     }
 
+    
+    const liveChainPanel = document.getElementById('live-chain-panel');
+    const executionChain = document.getElementById('execution-chain');
+    let activeQueryId = null;
+    let nodesState = [];
+
+    function renderLiveChain() {
+      if(!activeQueryId) return;
+      liveChainPanel.style.display = 'block';
+      let html = '';
+      nodesState.forEach((node, idx) => {
+         const st = node.status;
+         let cls = 'glass-token';
+         if(st === 'running') cls += ' running';
+         else if(st === 'success') cls += ' success';
+         else if(st === 'failed') cls += ' failed';
+         
+         html += `<div class="${cls}">${node.name}</div>`;
+         if (idx < nodesState.length - 1) {
+             html += `<div class="chain-arrow">→</div>`;
+         }
+      });
+      if(nodesState.length === 0) {
+          html = '<div class="notice">Waiting for execution to start...</div>';
+      }
+      executionChain.innerHTML = html;
+    }
+
+    function initWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/dashboard/live`);
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'query_started') {
+          activeQueryId = data.query_id;
+          nodesState = data.nodes.map(n => ({ name: n.node_name, status: 'pending' }));
+          renderLiveChain();
+        } else if (data.type === 'node_started' && data.query_id === activeQueryId) {
+          const n = nodesState.find(x => x.name === data.node_name);
+          if(n) n.status = 'running';
+          renderLiveChain();
+        } else if (data.type === 'node_completed' && data.query_id === activeQueryId) {
+          const n = nodesState.find(x => x.name === data.node_name);
+          if(n) n.status = data.status;
+          renderLiveChain();
+        }
+      };
+      
+      ws.onclose = () => {
+        setTimeout(initWebSocket, 3000);
+      };
+    }
+    initWebSocket();
+
     async function runQuery() {
       const query = queryInput.value.trim();
       if (!query) return;
 
+      
       runButton.disabled = true;
       statusLine.textContent = 'Running POST /query ...';
+      
+      activeQueryId = null;
+      nodesState = [];
+      liveChainPanel.style.display = 'none';
+      executionChain.innerHTML = '';
+
 
       try {
         const response = await fetch('/query', {
