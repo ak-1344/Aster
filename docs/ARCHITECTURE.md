@@ -62,12 +62,20 @@ The system is built on the principle that every module should have a single resp
 
 ### 4. Query Manager & Decision Memory
 *   **Takes as input:** Raw user queries from the API.
+<<<<<<< HEAD
 *   **Produces:** Normalised queries routed into the planning workflow, or instant responses served from SQLite cache (`backend/data/decision_memory.db`) on exact-key hits. Cache hits are enriched with current `routing_reason` metadata from the Context Builder.
+=======
+*   **Produces:** Normalised queries routed into the planning workflow, or instant responses served from SQLite cache (`backend/data/decision_memory.db`) on exact-key hits.
+>>>>>>> b9bffd4ea829bca965a488417059c71d8463c11c
 *   **Critically DOES NOT:** Generate new analytical plans on cache hits.
 
 ### 5. Context Builder & Filter Validator
 *   **Takes as input:** Normalised query text and dataset schema metadata.
+<<<<<<< HEAD
 *   **Produces:** Structured context object containing extracted intent (TF-IDF cosine similarity over canonical example phrases, with legacy keyword lists retained but deprecated), requested cluster counts, target entities, `intent_routing` metadata (matched example + similarity score), and a list of `unsupported_filters` (search constraints not present in the dataset schema). May return a clarification payload when the query is too vague, relies only on unsupported filters, or uses ambiguous relative thresholds.
+=======
+*   **Produces:** Structured context object containing extracted intent, requested cluster counts, target entities, and a list of `unsupported_filters` (search constraints not present in the dataset schema).
+>>>>>>> b9bffd4ea829bca965a488417059c71d8463c11c
 *   **Critically DOES NOT:** Plan the execution graph.
 
 ### 6. Planner
