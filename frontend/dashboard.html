@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASTER — Metrics Dashboard</title>
+  <style>
+
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+    :root {
+      color-scheme: light;
+      --base: #d8e2e8;
+      --light-shadow: #ffffff;
+      --dark-shadow: #b0c0ce;
+      --glass-bg: rgba(255, 255, 255, 0.45);
+      --glass-border: rgba(255, 255, 255, 0.6);
+      --accent: #0a5c55;
+      --glow: #00bda6;
+      --ink: #1f2937;
+      --muted: #64748b;
+      --font-display: 'Outfit', system-ui, sans-serif;
+      --font-data: 'JetBrains Mono', monospace;
+      --font-body: system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      background: var(--base);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .shell { max-width: 1180px; margin: 0 auto; display: grid; gap: 24px; }
+    h1, h2, h3 { font-family: var(--font-display); margin: 0 0 10px; color: var(--ink); }
+    p, .notice { margin: 0; color: var(--muted); line-height: 1.5; }
+
+    /* Neumorphic Utilities */
+    .neu-surface {
+      background: var(--base);
+      border-radius: 20px;
+      box-shadow: 10px 10px 20px var(--dark-shadow), -10px -10px 20px var(--light-shadow);
+      padding: 24px;
+    }
+    .neu-inset {
+      background: var(--base);
+      border: none;
+      border-radius: 12px;
+      box-shadow: inset 5px 5px 10px var(--dark-shadow), inset -5px -5px 10px var(--light-shadow);
+      padding: 12px 16px;
+      color: var(--ink);
+      font-family: var(--font-body);
+      width: 100%;
+    }
+    .neu-button {
+      background: var(--base);
+      border: none;
+      border-radius: 12px;
+      box-shadow: 5px 5px 10px var(--dark-shadow), -5px -5px 10px var(--light-shadow);
+      color: var(--accent);
+      font-weight: 700;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: var(--font-display);
+      min-width: 120px;
+    }
+
+    /* Glassmorphic Utilities */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(31, 41, 55, 0.05);
+      padding: 20px;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(31, 41, 55, 0.03);
+    }
+    .glass-token {
+      background: rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--glass-border);
+      border-radius: 30px;
+      padding: 8px 16px;
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-data);
+      font-size: 0.85rem;
+      color: var(--ink);
+      transition: all 0.3s ease;
+    }
+
+    .query-row { display: grid; gap: 16px; grid-template-columns: 1fr auto; margin-top: 20px; }
+    .grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(31, 41, 55, 0.1); vertical-align: top; }
+    th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-display); }
+    .metric { font-size: 2rem; font-weight: 800; color: var(--accent); font-family: var(--font-data); }
+    pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,255,0.5); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border); font-size: 0.85rem; font-family: var(--font-data); }
+    .data-number { font-family: var(--font-data); }
+    .scatter-wrap { display: grid; gap: 6px; }
+    .dot-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); font-family: var(--font-data); }
+
+    /* Flowchart styles */
+    .flowchart-container {
+      width: 100%;
+      overflow-x: auto;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 200px;
+    }
+    .node-box { stroke: var(--glass-border); stroke-width: 1.5px; rx: 12; ry: 12; }
+    .node-success { fill: rgba(10, 92, 85, 0.15); stroke: var(--accent); }
+    .node-failed { fill: rgba(220, 53, 69, 0.15); stroke: #dc3545; }
+    .node-skipped { fill: rgba(255, 255, 255, 0.2); stroke: var(--glass-border); }
+    .node-inprogress { fill: rgba(0, 189, 166, 0.2); stroke: var(--glow); animation: pulse-stroke 1.5s infinite alternate; }
+    .node-gray { fill: rgba(255, 255, 255, 0.2); stroke: var(--glass-border); }
+    
+    @keyframes pulse-stroke {
+      from { filter: drop-shadow(0 0 2px rgba(0, 189, 166, 0.3)); }
+      to { filter: drop-shadow(0 0 10px rgba(0, 189, 166, 0.8)); }
+    }
+    
+    .node-text { font-family: var(--font-display); font-size: 13px; font-weight: 600; text-anchor: middle; alignment-baseline: middle; fill: var(--ink); }
+    .node-dur { font-family: var(--font-data); font-size: 11px; text-anchor: middle; alignment-baseline: middle; fill: var(--muted); }
+    .edge { stroke: var(--muted); stroke-width: 2px; fill: none; marker-end: url(#arrowhead); }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-connected { background-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .status-disconnected { background-color: #dc3545; }
+  
+    @media (prefers-reduced-motion: reduce) {
+      .glass-token.running { animation: none; }
+      .node-inprogress { animation: none; }
+    }
+    a:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero neu-surface">
+      <h1>ASTER — Metrics Dashboard</h1>
+      <p>Live node performance and query execution monitoring.</p>
+      <div style="margin-top: 10px; font-size: 0.85rem;">
+        <span id="ws-status" class="status-indicator status-disconnected"></span>
+        <span id="ws-status-text">Live updates disconnected</span>
+      </div>
+    </section>
+
+    <section class="glass-panel">
+      <h2>Node Performance Stats</h2>
+      <div id="node-stats-table" class="notice">Loading stats...</div>
+    </section>
+
+    <section class="glass-panel">
+      <h2>Recent Queries</h2>
+      <div id="recent-queries-table" class="notice">Loading queries...</div>
+    </section>
+
+    <section class="glass-panel">
+      <h2>Execution Chain Diagram <span id="current-query-id" style="font-size: 0.9rem; font-weight: normal; color: var(--muted);"></span></h2>
+      <div class="flowchart-container" id="diagram-container">
+        <div class="notice">Select a query to view its execution chain, or wait for a new query to start.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Configuration
+    const NODE_WIDTH = 140;
+    const NODE_HEIGHT = 50;
+    const X_SPACING = 50;
+    const Y_SPACING = 80;
+    
+    let currentQueryGraph = null;
+    let nodeStats = null;
+    const recentQueries = {}; // map query_id to query data
+
+    function renderQueriesTable() {
+      const rows = Object.values(recentQueries).sort((a,b) => b.timestamp - a.timestamp).map(q => {
+        return `<tr>
+          <td>${q.timestamp_str}</td>
+          <td><a href="#" onclick="loadQueryGraph('${q.id}'); return false;">${q.id.substring(0,8)}...</a></td>
+          <td>${q.workflow_name || 'unknown'}</td>
+          <td>${q.status}</td>
+        </tr>`;
+      }).join('');
+      
+      document.getElementById('recent-queries-table').innerHTML = `
+        <table>
+          <tr><th>Time</th><th>Query ID</th><th>Workflow</th><th>Status</th></tr>
+          ${rows || '<tr><td colspan="4">No queries yet</td></tr>'}
+        </table>
+      `;
+    }
+
+    async function fetchNodeStats() {
+      try {
+        const res = await fetch('/dashboard/node-stats');
+        const data = await res.json();
+        
+        const rows = Object.entries(data).map(([node, stats]) => {
+          return `<tr>
+            <td><strong>${node}</strong></td>
+            <td>${stats.call_count}</td>
+            <td>${stats.success_count}</td>
+            <td>${stats.failure_count}</td>
+            <td>${stats.avg_duration_ms} ms</td>
+          </tr>`;
+        }).join('');
+        
+        document.getElementById('node-stats-table').innerHTML = `
+          <table>
+            <tr><th>Node</th><th>Calls</th><th>Success</th><th>Failed</th><th>Avg Duration</th></tr>
+            ${rows}
+          </table>
+        `;
+      } catch (err) {
+        document.getElementById('node-stats-table').innerHTML = `<div class="notice">Failed to load stats: ${err.message}</div>`;
+      }
+    }
+
+    // Static diagram rendering
+    function renderDiagram(nodes) {
+      if (!nodes || nodes.length === 0) {
+        document.getElementById('diagram-container').innerHTML = '<div class="notice">No execution graph available.</div>';
+        return;
+      }
+
+      // Simple layout: position nodes in layers based on dependencies
+      // Map node name to node object
+      const nodeMap = {};
+      nodes.forEach(n => { nodeMap[n.node_name] = { ...n, layer: 0, incoming: 0, x: 0, y: 0 }; });
+      
+      // Calculate layers
+      let changed = true;
+      let iters = 0;
+      while (changed && iters < 100) {
+        changed = false;
+        nodes.forEach(n => {
+          const currentLayer = nodeMap[n.node_name].layer;
+          let maxDepLayer = -1;
+          (n.dependencies || []).forEach(dep => {
+            if (nodeMap[dep]) {
+              maxDepLayer = Math.max(maxDepLayer, nodeMap[dep].layer);
+            }
+          });
+          if (maxDepLayer >= currentLayer) {
+            nodeMap[n.node_name].layer = maxDepLayer + 1;
+            changed = true;
+          }
+        });
+        iters++;
+      }
+
+      // Assign X/Y coordinates
+      const layerCounts = {};
+      const layerHeights = {};
+      nodes.forEach(n => {
+        const l = nodeMap[n.node_name].layer;
+        layerCounts[l] = (layerCounts[l] || 0) + 1;
+        const index = layerCounts[l] - 1;
+        nodeMap[n.node_name].x = l * (NODE_WIDTH + X_SPACING) + 50;
+        nodeMap[n.node_name].y = index * (NODE_HEIGHT + Y_SPACING) + 50;
+        layerHeights[l] = Math.max(layerHeights[l] || 0, nodeMap[n.node_name].y + NODE_HEIGHT + 50);
+      });
+
+      const maxLayer = Math.max(...Object.keys(layerCounts).map(Number));
+      const width = (maxLayer + 1) * (NODE_WIDTH + X_SPACING) + 100;
+      const height = Math.max(...Object.values(layerHeights), 200);
+
+      let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--muted)" />
+          </marker>
+        </defs>`;
+
+      // Draw edges
+      nodes.forEach(n => {
+        const target = nodeMap[n.node_name];
+        (n.dependencies || []).forEach(dep => {
+          if (nodeMap[dep]) {
+            const source = nodeMap[dep];
+            const startX = source.x + NODE_WIDTH;
+            const startY = source.y + NODE_HEIGHT / 2;
+            const endX = target.x;
+            const endY = target.y + NODE_HEIGHT / 2;
+            
+            // Cubic bezier for smooth curves
+            const ctrl1X = startX + X_SPACING / 2;
+            const ctrl1Y = startY;
+            const ctrl2X = endX - X_SPACING / 2;
+            const ctrl2Y = endY;
+            
+            svg += `<path class="edge" d="M ${startX} ${startY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${endX} ${endY}" />`;
+          }
+        });
+      });
+
+      // Draw nodes
+      nodes.forEach(n => {
+        const node = nodeMap[n.node_name];
+        let statusClass = 'node-gray';
+        if (node.status === 'success') statusClass = 'node-success';
+        else if (node.status === 'failed') statusClass = 'node-failed';
+        else if (node.status === 'skipped') statusClass = 'node-skipped';
+        else if (node.status === 'inprogress') statusClass = 'node-inprogress';
+        
+        svg += `<rect class="node-box ${statusClass}" id="rect-${node.node_name}" x="${node.x}" y="${node.y}" width="${NODE_WIDTH}" height="${NODE_HEIGHT}" />`;
+        svg += `<text class="node-text" x="${node.x + NODE_WIDTH/2}" y="${node.y + 20}">${node.node_name}</text>`;
+        
+        const durText = node.duration_ms !== undefined && node.duration_ms > 0 ? `${node.duration_ms} ms` : (node.status || '');
+        svg += `<text class="node-dur" id="dur-${node.node_name}" x="${node.x + NODE_WIDTH/2}" y="${node.y + 38}">${durText}</text>`;
+      });
+
+      svg += `</svg>`;
+      document.getElementById('diagram-container').innerHTML = svg;
+      currentQueryGraph = nodeMap; // Save for live updates
+    }
+
+    async function loadQueryGraph(id) {
+      document.getElementById('current-query-id').textContent = `(Query #${id})`;
+      try {
+        const res = await fetch(`/dashboard/queries/${id}/graph`);
+        if (!res.ok) throw new Error("Graph not found");
+        const nodes = await res.json();
+        renderDiagram(nodes);
+      } catch (err) {
+        document.getElementById('diagram-container').innerHTML = `<div class="notice">Failed to load graph: ${err.message}</div>`;
+      }
+    }
+
+    // Event Bus - Live WebSocket connection logic
+    function initWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/dashboard/live`);
+      const statusInd = document.getElementById('ws-status');
+      const statusText = document.getElementById('ws-status-text');
+
+      ws.onopen = () => {
+        statusInd.className = 'status-indicator status-connected';
+        statusText.textContent = 'Live updates connected';
+      };
+
+      ws.onclose = () => {
+        statusInd.className = 'status-indicator status-disconnected';
+        statusText.textContent = 'Live updates disconnected (will retry...)';
+        setTimeout(initWebSocket, 3000);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const qid = data.query_id;
+        
+        if (data.type === 'query_started') {
+          recentQueries[qid] = {
+            id: qid,
+            timestamp: Date.now(),
+            timestamp_str: new Date().toLocaleTimeString(),
+            workflow_name: data.workflow_name,
+            status: 'running',
+            nodes: data.nodes
+          };
+          renderQueriesTable();
+          
+          document.getElementById('current-query-id').textContent = `(Query ${qid.substring(0,8)}...)`;
+          renderDiagram(data.nodes);
+        }
+        else if (data.type === 'node_started') {
+          if (currentQueryGraph && currentQueryGraph[data.node_name]) {
+            currentQueryGraph[data.node_name].status = 'inprogress';
+            updateNodeRender(data.node_name);
+          }
+        }
+        else if (data.type === 'node_completed') {
+          if (currentQueryGraph && currentQueryGraph[data.node_name]) {
+            currentQueryGraph[data.node_name].status = data.status;
+            currentQueryGraph[data.node_name].duration_ms = data.duration_ms;
+            updateNodeRender(data.node_name);
+          }
+          fetchNodeStats(); // Refresh stats silently on node completion
+        }
+        else if (data.type === 'query_completed') {
+          if (recentQueries[qid]) {
+            recentQueries[qid].status = data.status;
+            renderQueriesTable();
+          }
+        }
+      };
+    }
+
+    function updateNodeRender(nodeName) {
+      const node = currentQueryGraph[nodeName];
+      if (!node) return;
+      
+      const rect = document.getElementById(`rect-${nodeName}`);
+      const dur = document.getElementById(`dur-${nodeName}`);
+      if (rect) {
+        rect.className.baseVal = `node-box node-${node.status}`;
+      }
+      if (dur) {
+        dur.textContent = node.duration_ms !== undefined && node.duration_ms > 0 ? `${node.duration_ms} ms` : (node.status || '');
+      }
+    }
+
+    // Initial load
+    renderQueriesTable();
+    fetchNodeStats();
+    initWebSocket();
+  </script>
+</body>
+</html>

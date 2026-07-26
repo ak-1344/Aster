@@ -1,9 +1,14 @@
-"""ASTER backend server entrypoint."""
+import sys
+from pathlib import Path
 
-from __future__ import annotations
+# Ensure root directory is on sys.path so 'backend' package resolves
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+	sys.path.insert(0, str(ROOT_DIR))
 
 import uvicorn
 
 
 if __name__ == "__main__":
 	uvicorn.run("backend.app.api.main:app", host="127.0.0.1", port=8000, reload=False)
+

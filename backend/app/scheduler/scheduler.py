@@ -111,8 +111,72 @@ def execute_graph(graph: ExecutionGraph, initial_context: dict[str, Any]) -> dic
     context = initial_context
     outputs: dict[str, Any] = {}
 
-    for node_name in execution_order:
-        node_output = _execute_node(node_name, context)
-        outputs[node_name] = node_output
+    from backend.app.dashboard.event_bus import broadcast
+    import uuid
+    import time
+    
+    query_id = str(uuid.uuid4())
+    
+    broadcast({
+        "type": "query_started",
+        "query_id": query_id,
+        "workflow_name": graph.workflow_name,
+        "nodes": [n.to_dict() for n in graph.nodes]
+    })
 
+    for node_name in execution_order:
+        start_time = time.perf_counter()
+        
+        broadcast({
+            "type": "node_started",
+            "query_id": query_id,
+            "node_name": node_name
+        })
+        
+        try:
+            node_output = _execute_node(node_name, context)
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            if isinstance(node_output, dict):
+                node_output["_status"] = "success"
+                node_output["_duration_ms"] = duration_ms
+            outputs[node_name] = node_output
+            
+            broadcast({
+                "type": "node_completed",
+                "query_id": query_id,
+                "node_name": node_name,
+                "status": "success",
+                "duration_ms": duration_ms
+            })
+        except SchedulerExecutionError as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            outputs[node_name] = {
+                "_status": "failed",
+                "_duration_ms": duration_ms,
+                "error": str(e)
+            }
+            e.partial_outputs = outputs
+            
+            broadcast({
+                "type": "node_completed",
+                "query_id": query_id,
+                "node_name": node_name,
+                "status": "failed",
+                "duration_ms": duration_ms,
+                "error": str(e)
+            })
+            
+            broadcast({
+                "type": "query_completed",
+                "query_id": query_id,
+                "status": "failed"
+            })
+            raise
+
+    broadcast({
+        "type": "query_completed",
+        "query_id": query_id,
+        "status": "success"
+    })
+    
     return outputs

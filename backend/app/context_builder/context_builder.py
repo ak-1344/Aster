@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import pandas as pd
 
 from backend.utils.loader import DEFAULT_DATASET_PATH
 
@@ -43,6 +44,7 @@ class QueryContext:
 	output_format: str = "table"
 	dataset_path: Path = DEFAULT_DATASET_PATH
 	notes: list[str] = field(default_factory=list)
+	unsupported_filters: list[dict[str, str]] = field(default_factory=list)
 
 	def to_dict(self) -> dict[str, Any]:
 		"""Return a JSON-serializable representation of the context."""
@@ -56,6 +58,7 @@ class QueryContext:
 			"output_format": self.output_format,
 			"dataset_path": str(self.dataset_path),
 			"notes": self.notes,
+			"unsupported_filters": self.unsupported_filters,
 		}
 
 
@@ -94,6 +97,54 @@ def extract_entities(normalized_query: str) -> list[str]:
 	return entities
 
 
+def extract_and_validate_filters(normalized_query: str, dataset_path: Path) -> list[dict[str, str]]:
+	"""Extract requested filters and validate against dataset columns."""
+	
+	FILTER_DOMAINS = {
+		"age": ["age", "aged", "old", "young", "years"],
+		"city/location": ["city", "location", "chennai", "mumbai", "delhi", "bangalore", "country", "state", "region", "zip", "area"],
+		"gender": ["gender", "male", "female", "men", "women", "sex"],
+		"account balance": ["account", "balance", "money", "funds"],
+		"purchase frequency": ["purchase", "frequency", "buy", "often"],
+		"credit limit": ["credit", "limit"],
+		"tenure": ["tenure", "duration", "time", "months"],
+		"payments": ["payment", "payments", "paid"],
+	}
+	
+	requested_domains = []
+	tokens = set(normalized_query.split())
+	for domain, keywords in FILTER_DOMAINS.items():
+		if any(keyword in tokens for keyword in keywords):
+			requested_domains.append(domain)
+			
+	if not requested_domains:
+		return []
+		
+	try:
+		df = pd.read_csv(dataset_path, nrows=0)
+		columns = [col.lower() for col in df.columns]
+	except Exception:
+		columns = []
+		
+	unsupported_filters = []
+	for domain in requested_domains:
+		domain_words = set(re.findall(r'[a-z]+', domain.lower()))
+		
+		is_supported = False
+		for col in columns:
+			if any(word in col for word in domain_words if len(word) > 2):
+				is_supported = True
+				break
+				
+		if not is_supported:
+			unsupported_filters.append({
+				"requested": domain,
+				"reason": "no matching column in current dataset"
+			})
+			
+	return unsupported_filters
+
+
 def build_context(query: str, dataset_path: str | Path | None = None) -> dict[str, Any]:
 	"""Build a structured planner context from a user query."""
 
@@ -117,5 +168,6 @@ def build_context(query: str, dataset_path: str | Path | None = None) -> dict[st
 		filters=filters,
 		output_format=output_format,
 		dataset_path=resolved_dataset_path,
+		unsupported_filters=extract_and_validate_filters(normalized_query, resolved_dataset_path),
 	)
 	return context.to_dict()

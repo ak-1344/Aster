@@ -10,3 +10,4 @@ google-genai
 python-dotenv
 pydantic
 httpx2
+python-multipart
