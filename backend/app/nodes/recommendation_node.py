@@ -92,6 +92,7 @@ def _phrasing_prompt(
     query_summary = {
         "normalized_query": (query_context or {}).get("normalized_query", ""),
         "intent": (query_context or {}).get("intent", "segmentation"),
+        "unsupported_filters": (query_context or {}).get("unsupported_filters", []),
     }
     return "\n".join(
         [
@@ -100,6 +101,7 @@ def _phrasing_prompt(
             "Your only job is to rephrase the provided recommendation output into concise,",
             "business-friendly narratives. Do not change the tier, action, or cross-sell items.",
             "Do not invent new recommendations, change cluster assignments, or override the rule engine.",
+            "IMPORTANT: If the user requested filters that are unsupported (see unsupported_filters in query context), DO NOT mention them in your narratives. The results reflect only the supported criteria.",
             f"Query context: {json.dumps(query_summary, sort_keys=True)}",
             f"Rule-engine recommendations: {json.dumps(cluster_recommendations, sort_keys=True, default=str)}",
         ]
