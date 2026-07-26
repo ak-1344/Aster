@@ -108,3 +108,16 @@ A green toast notification confirms dataset ingestion with row count, column lis
 **What the User Sees:**
 An alert banner appears on the dashboard warning: *"The following requested query filters are not supported by the dataset schema and were omitted: city, age."* The segmentation analysis continues on the remaining available behavioral metrics without throwing an error.
 
+---
+
+## Example 7: Query Clarification (Human-in-the-Loop)
+
+**The Query:** *"high value customers"*
+
+**Internal Pipeline:**
+1.  **Context Builder:** Detects an ambiguous relative value term without a numeric anchor or known tier name (`_mentions_threshold_without_anchor`).
+2.  **Clarification Trigger:** Before any planning or execution begins, the system flags the query with `status: clarification_needed`. No nodes execute, and nothing is written to the Decision Memory.
+3.  **Response Composer & UI:** Returns a prompt asking the user for a numeric threshold or tier name (e.g., priority, regular, dormant).
+
+**What the User Sees:**
+The dashboard bypasses results rendering and displays a clarification panel. It politely asks the user to clarify their intent (e.g., "Your query uses a relative value term without a numeric threshold... Please provide a numeric amount or choose a tier..."). The user can then provide follow-up clarification (e.g., "segment customers into 3 clusters") to run the full pipeline.
