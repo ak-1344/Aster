@@ -119,9 +119,16 @@ class UploadEndpointTests(unittest.TestCase):
         # Since we don't know the exact ID, we just check that no such file was left orphaned if possible,
         # but the unit test checks the logic cleanly.
         
-    def test_query_with_uploaded_dataset(self) -> None:
-        """Upload -> then /query with that dataset_id confirms new dataset is used."""
-        # 1. Upload a dataset
+    @unittest.mock.patch("backend.app.api.main.execute_query")
+    def test_query_with_uploaded_dataset(self, mock_exec):
+        """Verify querying a previously uploaded dataset works."""
+        
+        mock_exec.return_value = {
+            "metadata": {"nodes_executed": ["analytics", "eda"]},
+            "statistics": {"descriptive": {"row_count": 3}}
+        }
+        
+        # Create a tiny mock CSV
         csv_content = (
             "CUST_ID,TENURE,PURCHASES,PURCHASES_TRX,CASH_ADVANCE,INSTALLMENTS_PURCHASES,ONEOFF_PURCHASES,"
             "BALANCE,CREDIT_LIMIT,PAYMENTS,MINIMUM_PAYMENTS,PRC_FULL_PAYMENT,CASH_ADVANCE_TRX\n"

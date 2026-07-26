@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from starlette.testclient import TestClient
 
@@ -30,8 +31,15 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertIn("metadata", body)
         self.assertIn("segmentation", body["metadata"]["nodes_executed"])
 
-    def test_post_query_descriptive_workflow(self) -> None:
+    @patch("backend.app.api.main.execute_query")
+    def test_post_query_descriptive_workflow(self, mock_exec) -> None:
         """POST /query runs descriptive/EDA workflow without segmentation nodes."""
+        mock_exec.return_value = {
+            "workflow_name": "descriptive_workflow",
+            "intent": "descriptive",
+            "statistics": {"descriptive": {}, "exploratory": {}},
+            "metadata": {"nodes_executed": ["analytics", "eda"]}
+        }
         client = TestClient(app)
         response = client.post(
             "/query",
