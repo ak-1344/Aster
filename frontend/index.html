@@ -116,13 +116,13 @@
 </head>
 <body>
   <main class="shell">
-    <section class="hero">
+    <section class="hero neu-surface">
       <p class="notice">Canonical path: POST /query through Planner + Scheduler. Legacy bypass: POST /run-workflow (ISSUE-002 fallback).</p>
       <h1>ASTER — Retail Banking Segmentation Agent</h1>
       <p>Ask a natural-language question about customer behaviour. ASTER plans and executes the analytical workflow, then returns segments, recommendations, and rule-based explanations.</p>
       <div class="query-row">
-        <input id="query-input" type="text" value="segment customers into 3 clusters" placeholder="e.g. segment customers into 3 clusters" />
-        <button id="run-button">Run Query</button>
+        <input id="query-input" type="text" class="neu-inset" value="segment customers into 3 clusters" placeholder="e.g. segment customers into 3 clusters" />
+        <button id="run-button" class="neu-button">Run Query</button>
       </div>
       <p id="status-line" class="notice" style="margin-top:10px;">Ready.</p>
       <div id="unsupported-filters-notice" class="notice" style="display: none; color: #b73a3a; margin-top: 10px; font-weight: bold; padding: 10px; background: rgba(183, 58, 58, 0.1); border-radius: 8px;"></div>
@@ -134,43 +134,43 @@
     </section>
 
     <section class="grid">
-      <div class="panel">
+      <div class="glass-panel">
         <h2>Workflow</h2>
         <div id="workflow-meta" class="notice">No query run yet.</div>
       </div>
-      <div class="panel">
+      <div class="glass-panel">
         <h2>Evaluation</h2>
         <div class="metric" id="silhouette-score">--</div>
         <p class="notice">Silhouette score (segmentation queries only).</p>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Segment Personas</h2>
       <div id="segment-summaries" class="notice">No segment summaries yet.</div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Cluster Recommendations</h2>
       <div id="recommendations" class="notice">No recommendations yet.</div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Customer Explanations</h2>
       <div id="explanations" class="notice">No explanations yet.</div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Cluster Table</h2>
       <div id="cluster-table" class="notice">No cluster table yet.</div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Charts / Tables</h2>
       <div id="visualizations" class="notice">No visualization payload yet.</div>
     </section>
 
-    <section class="panel">
+    <section class="glass-panel">
       <h2>Statistics</h2>
       <pre id="statistics">No statistics yet.</pre>
     </section>
@@ -205,10 +205,10 @@
       const parts = [];
       if (viz.scatter) {
         const sample = (viz.scatter.data || []).slice(0, 12);
-        parts.push(`<div class="card"><strong>${viz.scatter.title}</strong><div class="dot-row">${sample.map((d) => `C${d.customer_id}: (${d.x}, ${d.y}) → seg ${d.cluster_label}`).join(' | ')}</div></div>`);
+        parts.push(`<div class="glass-card"><strong>${viz.scatter.title}</strong><div class="dot-row">${sample.map((d) => `C${d.customer_id}: (${d.x}, ${d.y}) → seg ${d.cluster_label}`).join(' | ')}</div></div>`);
       }
       if (viz.cluster_size_bar) {
-        parts.push(`<div class="card">${renderTable(viz.cluster_size_bar.data || [])}</div>`);
+        parts.push(`<div class="glass-card">${renderTable(viz.cluster_size_bar.data || [])}</div>`);
       }
       return parts.join('');
     }
