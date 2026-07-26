@@ -146,7 +146,13 @@
     }
     .status-connected { background-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
     .status-disconnected { background-color: #dc3545; }
-  </style>
+  
+    @media (prefers-reduced-motion: reduce) {
+      .glass-token.running { animation: none; }
+      .node-inprogress { animation: none; }
+    }
+    a:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; border-radius: 4px; }
+    </style>
 </head>
 <body>
   <main class="shell">
