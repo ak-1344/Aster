@@ -108,6 +108,25 @@
     
     let currentQueryGraph = null;
     let nodeStats = null;
+    const recentQueries = {}; // map query_id to query data
+
+    function renderQueriesTable() {
+      const rows = Object.values(recentQueries).sort((a,b) => b.timestamp - a.timestamp).map(q => {
+        return `<tr>
+          <td>${q.timestamp_str}</td>
+          <td><a href="#" onclick="loadQueryGraph('${q.id}'); return false;">${q.id.substring(0,8)}...</a></td>
+          <td>${q.workflow_name || 'unknown'}</td>
+          <td>${q.status}</td>
+        </tr>`;
+      }).join('');
+      
+      document.getElementById('recent-queries-table').innerHTML = `
+        <table>
+          <tr><th>Time</th><th>Query ID</th><th>Workflow</th><th>Status</th></tr>
+          ${rows || '<tr><td colspan="4">No queries yet</td></tr>'}
+        </table>
+      `;
+    }
 
     async function fetchNodeStats() {
       try {
@@ -246,11 +265,83 @@
       }
     }
 
-    // Part 3 placeholder - Event Bus
-    // Live WebSocket connection logic will go here
+    // Event Bus - Live WebSocket connection logic
+    function initWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/dashboard/live`);
+      const statusInd = document.getElementById('ws-status');
+      const statusText = document.getElementById('ws-status-text');
+
+      ws.onopen = () => {
+        statusInd.className = 'status-indicator status-connected';
+        statusText.textContent = 'Live updates connected';
+      };
+
+      ws.onclose = () => {
+        statusInd.className = 'status-indicator status-disconnected';
+        statusText.textContent = 'Live updates disconnected (will retry...)';
+        setTimeout(initWebSocket, 3000);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const qid = data.query_id;
+        
+        if (data.type === 'query_started') {
+          recentQueries[qid] = {
+            id: qid,
+            timestamp: Date.now(),
+            timestamp_str: new Date().toLocaleTimeString(),
+            workflow_name: data.workflow_name,
+            status: 'running',
+            nodes: data.nodes
+          };
+          renderQueriesTable();
+          
+          document.getElementById('current-query-id').textContent = `(Query ${qid.substring(0,8)}...)`;
+          renderDiagram(data.nodes);
+        }
+        else if (data.type === 'node_started') {
+          if (currentQueryGraph && currentQueryGraph[data.node_name]) {
+            currentQueryGraph[data.node_name].status = 'inprogress';
+            updateNodeRender(data.node_name);
+          }
+        }
+        else if (data.type === 'node_completed') {
+          if (currentQueryGraph && currentQueryGraph[data.node_name]) {
+            currentQueryGraph[data.node_name].status = data.status;
+            currentQueryGraph[data.node_name].duration_ms = data.duration_ms;
+            updateNodeRender(data.node_name);
+          }
+          fetchNodeStats(); // Refresh stats silently on node completion
+        }
+        else if (data.type === 'query_completed') {
+          if (recentQueries[qid]) {
+            recentQueries[qid].status = data.status;
+            renderQueriesTable();
+          }
+        }
+      };
+    }
+
+    function updateNodeRender(nodeName) {
+      const node = currentQueryGraph[nodeName];
+      if (!node) return;
+      
+      const rect = document.getElementById(`rect-${nodeName}`);
+      const dur = document.getElementById(`dur-${nodeName}`);
+      if (rect) {
+        rect.className.baseVal = `node-box node-${node.status}`;
+      }
+      if (dur) {
+        dur.textContent = node.duration_ms !== undefined && node.duration_ms > 0 ? `${node.duration_ms} ms` : (node.status || '');
+      }
+    }
 
     // Initial load
+    renderQueriesTable();
     fetchNodeStats();
+    initWebSocket();
   </script>
 </body>
 </html>
