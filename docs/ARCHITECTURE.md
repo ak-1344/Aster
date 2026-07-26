@@ -88,6 +88,11 @@ The system is built on the principle that every module should have a single resp
 *   **Produces:** A single, cohesive JSON response object.
 *   **Critically DOES NOT:** Perform any data transformations beyond assembling the final payload structure.
 
+### 11. Event Bus & Live Telemetry
+*   **Takes as input:** Execution lifecycle events (e.g., query_started, node_started, node_completed) emitted by the Scheduler.
+*   **Produces:** Real-time WebSocket broadcasts (`/dashboard/live`) and persisted execution metrics in Decision Memory.
+*   **Critically DOES NOT:** Block or delay the main analytical execution pipeline. It operates as a decoupled, non-blocking telemetry stream.
+
 ## The Model Registry
 
 The Model Registry is a central discovery and selection mechanism for analytical algorithms. It abstracts the instantiation of machine learning models from the nodes. 
@@ -114,6 +119,5 @@ ASTER follows an iterative development philosophy where optimization and advance
 
 *   **Authentication & Session Management:** Currently, all queries are stateless. Persistent user sessions are deferred.
 *   **Semantic Caching:** Matching queries by intent similarity using embeddings.
-*   **Metrics Dashboard:** Telemetry on pipeline performance.
 *   **PostgreSQL / Redis:** SQLite and Python dictionaries are used for the MVP to maintain zero-configuration portability.
 *   **Distributed Execution / Parallel Scheduler:** The current scheduler is single-threaded and executes the topological graph sequentially.

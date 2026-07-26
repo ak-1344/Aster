@@ -41,6 +41,11 @@ This document outlines the current capabilities of the ASTER platform from a use
 **What triggers it:** Any query that modifies or summarises data.
 **Example query:** *"Segment customers into 3 groups and show me the visualisations."*
 
+### 8. Live Execution Telemetry & Metrics Dashboard
+**What it does:** Provides a real-time view into the agent's thought process and execution pipeline. As ASTER plans and executes nodes (e.g. feature_engineering -> segmentation -> recommendation), the progress is broadcast live via WebSockets. A dedicated dashboard visualises node execution times, success rates, and the topological graph of the query.
+**What triggers it:** Opening the dashboard or running a query on the main interface.
+**Example query:** (No query needed, monitors all queries on the system live).
+
 ---
 
 ## LLM Integration: What's AI vs What's Deterministic?
