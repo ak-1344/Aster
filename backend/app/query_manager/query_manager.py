@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from backend.app.context_builder.context_builder import build_context, normalize_query
+from backend.app.context_builder.context_builder import build_context, detect_ambiguity, normalize_query
 from backend.app.decision_engine.decision_engine import generate_explanations
 from backend.app.decision_memory.decision_memory import lookup as dm_lookup
 from backend.app.decision_memory.decision_memory import store as dm_store
@@ -18,6 +18,37 @@ from backend.app.scheduler.scheduler import execute_graph
 logger = logging.getLogger(__name__)
 
 
+def _format_routing_reason(intent_routing: dict[str, Any] | None) -> str | None:
+    """Format semantic intent routing metadata for API consumers."""
+
+    if not intent_routing:
+        return None
+    matched_example = intent_routing.get("matched_example", "")
+    category = intent_routing.get("category", "descriptive")
+    score = intent_routing.get("similarity_score", 0.0)
+    return (
+        f"Matched example '{matched_example}' "
+        f"({category}, similarity={score})"
+    )
+
+
+def _enrich_cached_response(
+    cached: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge current intent-routing metadata into a decision-memory cache hit."""
+
+    routing_reason = _format_routing_reason(context.get("intent_routing"))
+    if not routing_reason:
+        return cached
+
+    enriched = dict(cached)
+    metadata = dict(enriched.get("metadata") or {})
+    metadata["routing_reason"] = routing_reason
+    enriched["metadata"] = metadata
+    return enriched
+
+
 def route_intent(query: str) -> str:
     """Route the request to a high-level analytical intent."""
 
@@ -25,6 +56,8 @@ def route_intent(query: str) -> str:
     context = build_context(query)
     if context["intent"] == "segmentation":
         return "segmentation"
+    if context["intent"] == "explanation":
+        return "explanation"
     if context["intent"] == "descriptive":
         return "descriptive"
     if "recommend" in normalized_query:
@@ -45,22 +78,45 @@ def orchestrate_query(query: str, dataset_path: str | Path | None = None) -> dic
     }
 
 
-def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[str, Any]:
+def execute_query(
+    query: str,
+    dataset_path: str | Path | None = None,
+    clarification_response: str | None = None,
+) -> dict[str, Any]:
     """Run the full analytical pipeline for a natural-language query.
 
     Before running the pipeline, checks decision memory for an exact-key
     cache hit. On hit: returns the stored response directly, skipping
     Planner/Scheduler/Nodes. On miss: runs normally, then writes.
+
+    When clarification_response is absent, may short-circuit with
+    status=clarification_needed instead of executing nodes. Clarification
+    responses are never written to decision memory.
     """
 
-    # --- Decision memory cache read ---
-    cached = dm_lookup(query)
-    if cached is not None:
-        logger.info("Decision memory cache hit for query: %s", query[:80])
-        return cached
+    if clarification_response is None:
+        context = build_context(query, dataset_path=dataset_path)
+        clarification = detect_ambiguity(context, Path(context["dataset_path"]))
+        if clarification is not None:
+            return {
+                "status": "clarification_needed",
+                "question": clarification["question"],
+                "original_query": query,
+            }
 
-    # --- Full pipeline ---
-    context = build_context(query, dataset_path=dataset_path)
+        cached = dm_lookup(query)
+        if cached is not None:
+            logger.info("Decision memory cache hit for query: %s", query[:80])
+            return _enrich_cached_response(cached, context)
+        working_query = query
+    else:
+        working_query = f"{query} {clarification_response}".strip()
+        context = build_context(working_query, dataset_path=dataset_path)
+        cached = dm_lookup(working_query)
+        if cached is not None:
+            logger.info("Decision memory cache hit for clarified query: %s", working_query[:80])
+            return _enrich_cached_response(cached, context)
+
     planner_output = build_execution_plan(context)
     graph = build_execution_graph(planner_output)
 
@@ -89,7 +145,7 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
         }
         try:
             dm_store(
-                query_text=query,
+                query_text=working_query,
                 response={"error": str(e)},
                 execution_graph_summary=[node.to_dict() for node in graph.nodes],
                 chosen_algorithm=None,
@@ -110,7 +166,10 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
         execution_log=planner_output.get("execution_log", []),
         planning_path=planner_output.get("planning_path"),
         planner_reasoning=planner_output.get("planner_reasoning"),
+        routing_reason=_format_routing_reason(context.get("intent_routing")),
         unsupported_filters=context.get("unsupported_filters", []),
+        query_context=context,
+        planner_output=planner_output,
     )
 
     # --- Decision memory cache write (fire-and-forget) ---
@@ -132,7 +191,7 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
             "segment_count": len(explanations.get("segment_summaries", [])),
         }
         dm_store(
-            query_text=query,
+            query_text=working_query,
             response=response,
             execution_graph_summary=execution_graph_summary,
             chosen_algorithm=chosen_algorithm,

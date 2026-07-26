@@ -41,9 +41,46 @@ _EXPLAINABILITY_TIMEOUT_SECONDS = 8
 # Number of top feature contributions to return per explanation.
 _TOP_N_FEATURES = 5
 
+# Ratio of own-centroid distance to second-nearest-centroid distance above which
+# a customer is considered borderline between segments.
+_BOUNDARY_RATIO_THRESHOLD = 0.85
+
 
 def _label_feature(feature_name: str) -> str:
 	return FEATURE_LABELS.get(feature_name, feature_name.replace("_", " "))
+
+
+def _boundary_metrics_by_customer(segmentation: dict[str, Any]) -> dict[str, dict[str, Any]]:
+	"""Index per-customer boundary metrics produced by the segmentation node."""
+
+	return {
+		str(metric["customer_id"]): metric
+		for metric in segmentation.get("customer_boundary_metrics", [])
+	}
+
+
+def _append_boundary_fields(
+	explanation_entry: dict[str, Any],
+	boundary_metric: dict[str, Any] | None,
+) -> dict[str, Any]:
+	"""Attach boundary metrics and a borderline sentence when the ratio exceeds threshold."""
+
+	if boundary_metric is None:
+		return explanation_entry
+
+	explanation_entry["nearest_alternate_cluster"] = boundary_metric["nearest_alternate_cluster"]
+	explanation_entry["boundary_distance_ratio"] = boundary_metric["boundary_distance_ratio"]
+
+	ratio = float(boundary_metric["boundary_distance_ratio"])
+	if ratio > _BOUNDARY_RATIO_THRESHOLD:
+		own_segment = boundary_metric["cluster_label"]
+		alternate_segment = boundary_metric["nearest_alternate_cluster"]
+		explanation_entry["explanation"] = (
+			f"{explanation_entry['explanation']} "
+			f"This customer is borderline between Segment {own_segment} and Segment {alternate_segment}."
+		)
+
+	return explanation_entry
 
 
 def get_explainability_mode() -> str:
@@ -342,6 +379,7 @@ def _generate_rule_based_explanations(
 	labels: list[int],
 	customer_ids: list[str],
 	features_path: str,
+	boundary_metrics: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
 	"""Produce rule-based natural-language explanations from feature distance to centroids."""
 
@@ -371,13 +409,15 @@ def _generate_rule_based_explanations(
 			f"Assigned to Segment {cluster_index} primarily due to {reasons[0]}"
 			+ (f" and {reasons[1]}." if len(reasons) > 1 else ".")
 		)
-		customer_explanations.append(
+		entry = _append_boundary_fields(
 			{
 				"customer_id": customer_id,
 				"cluster_label": cluster_index,
 				"explanation": explanation,
-			}
+			},
+			(boundary_metrics or {}).get(str(customer_id)),
 		)
+		customer_explanations.append(entry)
 		segment_summaries.setdefault(cluster_index, []).extend(reasons)
 
 	segment_summary_rows = []
@@ -445,6 +485,7 @@ def generate_explanations(node_outputs: dict[str, Any]) -> dict[str, Any]:
 	if not features_path or not Path(features_path).exists():
 		return empty
 
+	boundary_metrics = _boundary_metrics_by_customer(segmentation)
 	mode = get_explainability_mode()
 
 	# --- Rule-based fast path ---
@@ -453,6 +494,7 @@ def generate_explanations(node_outputs: dict[str, Any]) -> dict[str, Any]:
 			return empty
 		result = _generate_rule_based_explanations(
 			feature_columns, cluster_centers, labels, customer_ids, features_path,
+			boundary_metrics=boundary_metrics,
 		)
 		result["explainer_used"] = "rule_based"
 		result["explainer_reason"] = "EXPLAINABILITY_MODE set to rule_based"
@@ -491,12 +533,16 @@ def generate_explanations(node_outputs: dict[str, Any]) -> dict[str, Any]:
 				f"Assigned to Segment {cluster_label} primarily due to {reasons[0]}"
 				+ (f" and {reasons[1]}." if len(reasons) > 1 else ".")
 			)
-			customer_explanations.append({
-				"customer_id": cid,
-				"cluster_label": cluster_label,
-				"explanation": explanation,
-				"feature_contributions": contributions,
-			})
+			entry = _append_boundary_fields(
+				{
+					"customer_id": cid,
+					"cluster_label": cluster_label,
+					"explanation": explanation,
+					"feature_contributions": contributions,
+				},
+				boundary_metrics.get(str(cid)),
+			)
+			customer_explanations.append(entry)
 
 		segment_summaries = []
 		for seg_label, seg_features in raw.get("segment_aggregates", {}).items():
@@ -539,6 +585,7 @@ def generate_explanations(node_outputs: dict[str, Any]) -> dict[str, Any]:
 	if cluster_centers:
 		result = _generate_rule_based_explanations(
 			feature_columns, cluster_centers, labels, customer_ids, features_path,
+			boundary_metrics=boundary_metrics,
 		)
 	else:
 		result = {"customer_explanations": [], "segment_summaries": []}

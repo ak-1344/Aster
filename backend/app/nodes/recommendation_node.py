@@ -17,19 +17,34 @@ from backend.app.llm.gemini_client import (
 from backend.app.model_registry import register
 
 
-def _tier_from_cluster_profile(cluster_frame: pd.DataFrame) -> str:
-    """Map a cluster profile to a business tier."""
+def _compute_tier_thresholds(features: pd.DataFrame) -> dict[str, float]:
+    """Compute dataset-wide quantile thresholds for tier assignment."""
+
+    return {
+        "spend_q67": float(features["monthly_spend"].quantile(0.67)),
+        "spend_q33": float(features["monthly_spend"].quantile(0.33)),
+        "frequency_q67": float(features["transaction_frequency_per_month"].quantile(0.67)),
+        "frequency_q33": float(features["transaction_frequency_per_month"].quantile(0.33)),
+        "credit_headroom_median": float(features["credit_headroom"].median()),
+    }
+
+
+def _tier_from_cluster_profile(
+    cluster_frame: pd.DataFrame,
+    thresholds: dict[str, float],
+) -> str:
+    """Map a cluster profile to a business tier using dataset-wide thresholds."""
 
     spend = float(cluster_frame["monthly_spend"].median())
     frequency = float(cluster_frame["transaction_frequency_per_month"].median())
     payment_ratio = float(cluster_frame["full_payment_ratio"].median())
     headroom = float(cluster_frame["credit_headroom"].median())
 
-    if spend >= cluster_frame["monthly_spend"].quantile(0.67) and frequency >= cluster_frame["transaction_frequency_per_month"].quantile(0.67):
+    if spend >= thresholds["spend_q67"] and frequency >= thresholds["frequency_q67"]:
         return "priority"
-    if spend <= cluster_frame["monthly_spend"].quantile(0.33) or frequency <= cluster_frame["transaction_frequency_per_month"].quantile(0.33):
+    if spend <= thresholds["spend_q33"] or frequency <= thresholds["frequency_q33"]:
         return "dormant"
-    if payment_ratio >= 0.75 and headroom >= cluster_frame["credit_headroom"].median():
+    if payment_ratio >= 0.75 and headroom >= thresholds["credit_headroom_median"]:
         return "regular"
     return "regular"
 
@@ -55,6 +70,43 @@ def _cluster_action_bundle(tier: str) -> dict[str, object]:
         },
     }
     return bundles[tier]
+
+
+def _behavioral_product_tags(cluster_frame: pd.DataFrame, tier: str) -> list[str]:
+    """Map cluster behavioral medians to specific bank product tags."""
+
+    tags: list[str] = []
+    util_median = float(cluster_frame["credit_utilization_ratio"].median())
+    full_payment_median = float(cluster_frame["full_payment_ratio"].median())
+    cash_advance_median = float(cluster_frame["cash_advance_ratio"].median())
+    oneoff_median = float(cluster_frame["oneoff_purchase_share"].median())
+    freq_median = float(cluster_frame["transaction_frequency_per_month"].median())
+    freq_q33 = float(cluster_frame["transaction_frequency_per_month"].quantile(0.33))
+
+    if util_median >= 0.6 and full_payment_median <= 0.5:
+        tags.append("debt_consolidation_loan")
+
+    if cash_advance_median >= 0.25:
+        tags.append("cash_advance_alternative_credit_line")
+
+    if oneoff_median >= 0.35 and full_payment_median >= 0.9:
+        tags.append("premium_rewards_card")
+
+    # Dormant tier already carries a reactivation-focused bundle; skip duplicate tag.
+    if tier != "dormant" and freq_median <= freq_q33:
+        tags.append("reactivation_offer")
+
+    return tags
+
+
+def _merge_cross_sell(tier_bundle: list[str], behavioral_tags: list[str]) -> list[str]:
+    """Combine tier defaults with behavioral product tags without duplication."""
+
+    merged: list[str] = []
+    for item in tier_bundle + behavioral_tags:
+        if item not in merged:
+            merged.append(item)
+    return merged
 
 
 def _phrasing_schema() -> dict[str, Any]:
@@ -167,22 +219,26 @@ def build_recommendations(
 
     clustered = features.copy().reset_index(drop=True)
     clustered["cluster_label"] = labels
+    tier_thresholds = _compute_tier_thresholds(features)
 
     cluster_profiles: dict[int, dict[str, object]] = {}
     cluster_tiers: dict[int, str] = {}
     cluster_recommendations: list[dict[str, object]] = []
 
     for cluster_label, cluster_frame in clustered.groupby("cluster_label"):
-        tier = _tier_from_cluster_profile(cluster_frame)
+        tier = _tier_from_cluster_profile(cluster_frame, tier_thresholds)
         cluster_tiers[int(cluster_label)] = tier
         bundle = _cluster_action_bundle(tier)
+        behavioral_tags = _behavioral_product_tags(cluster_frame, tier)
+        cross_sell = _merge_cross_sell(list(bundle["cross_sell"]), behavioral_tags)
         cluster_profiles[int(cluster_label)] = {
             "customer_count": int(len(cluster_frame)),
             "monthly_spend_median": round(float(cluster_frame["monthly_spend"].median()), 4),
             "transaction_frequency_median": round(float(cluster_frame["transaction_frequency_per_month"].median()), 4),
             "full_payment_ratio_median": round(float(cluster_frame["full_payment_ratio"].median()), 4),
             "tier": tier,
-            "cross_sell": bundle["cross_sell"],
+            "cross_sell": cross_sell,
+            "behavioral_products": behavioral_tags,
         }
         cluster_recommendations.append(
             {
@@ -190,7 +246,8 @@ def build_recommendations(
                 "tier": tier,
                 "action": bundle["action"],
                 "message": bundle["message"],
-                "cross_sell": bundle["cross_sell"],
+                "cross_sell": cross_sell,
+                "behavioral_products": behavioral_tags,
                 "customer_count": int(len(cluster_frame)),
             }
         )
@@ -207,12 +264,15 @@ def build_recommendations(
     customer_recommendations = []
     for _, row in clustered.iterrows():
         tier = cluster_tiers[int(row["cluster_label"])]
+        cluster_label = int(row["cluster_label"])
+        rec = next(r for r in cluster_recommendations if r["cluster_label"] == cluster_label)
         customer_recommendations.append(
             {
                 "customer_id": str(row["CUST_ID"]),
-                "cluster_label": int(row["cluster_label"]),
+                "cluster_label": cluster_label,
                 "tier": tier,
-                "primary_recommendation": _cluster_action_bundle(tier)["message"],
+                "primary_recommendation": rec["message"],
+                "behavioral_products": rec.get("behavioral_products", []),
             }
         )
 

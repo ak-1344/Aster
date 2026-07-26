@@ -283,6 +283,59 @@ def _explanation_centers(matrix: pd.DataFrame, labels: list[int]) -> dict[str, l
     }
 
 
+def _compute_customer_boundary_metrics(
+    matrix: pd.DataFrame,
+    labels: list[int],
+    customer_ids: list[str],
+    explanation_centers: dict[str, list[float]],
+) -> list[dict[str, Any]]:
+    """Compute per-customer distance to the second-nearest cluster centroid."""
+
+    import numpy as np
+
+    center_labels = sorted(int(label) for label in explanation_centers if int(label) >= 0)
+    if len(center_labels) < 2:
+        return []
+
+    center_matrix = np.array(
+        [explanation_centers[str(label)] for label in center_labels],
+        dtype=float,
+    )
+    label_to_index = {label: index for index, label in enumerate(center_labels)}
+    rows = matrix.to_numpy(dtype=float)
+    metrics: list[dict[str, Any]] = []
+
+    for row, cluster_label, customer_id in zip(rows, labels, customer_ids):
+        if cluster_label < 0 or cluster_label not in label_to_index:
+            continue
+
+        distances = np.linalg.norm(center_matrix - row, axis=1)
+        own_index = label_to_index[cluster_label]
+        own_distance = float(distances[own_index])
+
+        alternate_distances = [
+            (float(distances[index]), center_labels[index])
+            for index in range(len(center_labels))
+            if index != own_index
+        ]
+        if not alternate_distances:
+            continue
+
+        second_distance, alternate_label = min(alternate_distances, key=lambda item: item[0])
+        ratio = own_distance / second_distance if second_distance > 0 else 1.0
+
+        metrics.append(
+            {
+                "customer_id": customer_id,
+                "cluster_label": int(cluster_label),
+                "nearest_alternate_cluster": int(alternate_label),
+                "boundary_distance_ratio": round(ratio, 4),
+            }
+        )
+
+    return metrics
+
+
 def segment_customers(
     features: pd.DataFrame,
     n_clusters: int = 3,
@@ -328,6 +381,13 @@ def segment_customers(
     clustered["cluster_label"] = labels
     cluster_centers = getattr(model, "cluster_centers_", None)
     inertia = getattr(model, "inertia_", None)
+    explanation_centers = _explanation_centers(matrix, labels)
+    customer_boundary_metrics = _compute_customer_boundary_metrics(
+        matrix,
+        labels,
+        features["CUST_ID"].astype(str).tolist(),
+        explanation_centers,
+    )
 
     return {
         "labels": labels,
@@ -338,7 +398,8 @@ def segment_customers(
         "cluster_centers": (
             cluster_centers.round(4).tolist() if cluster_centers is not None else None
         ),
-        "explanation_centers": _explanation_centers(matrix, labels),
+        "explanation_centers": explanation_centers,
+        "customer_boundary_metrics": customer_boundary_metrics,
         "inertia": None if inertia is None else round(float(inertia), 4),
         "chosen_algorithm": algorithm,
         "algorithm_parameters": parameters,
