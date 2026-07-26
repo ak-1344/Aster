@@ -18,12 +18,19 @@ app = FastAPI(title="ASTER")
 
 class QueryRequest(BaseModel):
 	query: str = Field(..., min_length=1, description="Natural-language analytical query")
+	dataset_id: str | None = Field(None, description="Optional dataset ID from a previous upload")
 
 @app.post("/query")
 def post_query(body: QueryRequest) -> dict[str, Any]:
 	"""Run the canonical pipeline for a natural-language query."""
 
-	return execute_query(body.query)
+	dataset_path = None
+	if body.dataset_id:
+		dataset_path = Path("backend/data/raw") / f"{body.dataset_id}.csv"
+		if not dataset_path.exists():
+			raise HTTPException(status_code=400, detail=f"Dataset {body.dataset_id} not found")
+
+	return execute_query(body.query, dataset_path=dataset_path)
 
 @app.post("/upload")
 def upload_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
