@@ -46,6 +46,20 @@ This document outlines the current capabilities of the ASTER platform from a use
 **What triggers it:** Opening the dashboard or running a query on the main interface.
 **Example query:** (No query needed, monitors all queries on the system live).
 
+### 9. Custom Dataset Upload & Auto Feature-Engineering
+**What it does:** Allows users to drag and drop custom customer CSV datasets via the frontend or `POST /upload`. ASTER validates column types, imputes missing values, and automatically generates behavioral feature ratios for immediate querying.
+**What triggers it:** Dragging a CSV file into the upload zone or invoking `POST /upload`.
+
+### 10. Unsupported Filter Detection & Surfacing
+**What it does:** Compares user-requested search filters (e.g., "customers aged over 30 in New York") against the actual dataset schema. If filters refer to attributes missing from the dataset, ASTER surfaces a clear alert banner to the user while gracefully continuing execution on available behavioral data.
+**What triggers it:** Queries containing filters for non-existent columns.
+**Example query:** *"Segment high spenders aged 25 to 35 in London."*
+
+### 11. Instant Decision Memory Caching
+**What it does:** Caches executed analytical plans and outputs in a SQLite database (`backend/data/decision_memory.db`). Repeated queries bypass LLM and clustering latency, returning stored results instantaneously with cache metadata flags.
+**What triggers it:** Submitting an identical query twice.
+
+
 ---
 
 ## LLM Integration: What's AI vs What's Deterministic?

@@ -78,3 +78,33 @@ The dashboard bypasses the heavy charts and tables, returning a direct, fast res
 
 **What the User Sees:**
 The response is near-instantaneous (skipping the typical 3-5 second LLM/clustering delay). The frontend renders the exact same comprehensive report as Example 2, but the user will notice a `cache_hit` flag and timestamp in the metadata panel, indicating the results were served from memory.
+
+---
+
+## Example 5: Custom Dataset Upload & Querying
+
+**The Action:** Uploading a custom dataset `new_customers.csv` via the dashboard upload drop zone.
+
+**Internal Pipeline:**
+1.  **Frontend:** Transmits the file via `POST /upload`.
+2.  **Dataset Manager:** Validates CSV structure, computes missing value imputations, generates `dataset_id` (e.g., `ds_a8b9f1`), writes raw data to `backend/data/raw/ds_a8b9f1.csv`, and runs feature engineering creating `backend/data/processed/ds_a8b9f1_features.csv`.
+3.  **Subsequent Queries:** The user passes `dataset_id: "ds_a8b9f1"` in subsequent `/query` calls.
+
+**What the User Sees:**
+A green toast notification confirms dataset ingestion with row count, column list, and generated features. The query interface updates to target the newly uploaded dataset.
+
+---
+
+## Example 6: Query with Unsupported Search Filters
+
+**The Query:** *"Segment customers into 3 clusters who live in New York and are over age 30."*
+
+**Internal Pipeline:**
+1.  **Context Builder:** Parses the query and extracts requested filters (`city = New York`, `age > 30`).
+2.  **Filter Validation:** Compares requested filters against the loaded dataset schema (`CC GENERAL.csv`). Notes that neither `city` nor `age` exists in the schema.
+3.  **Surfacing:** Appends `["city", "age"]` to `unsupported_filters` in the context payload while retaining core segmentation intent.
+4.  **Response Composer & UI:** Assembles response with `unsupported_filters: ["city", "age"]`.
+
+**What the User Sees:**
+An alert banner appears on the dashboard warning: *"The following requested query filters are not supported by the dataset schema and were omitted: city, age."* The segmentation analysis continues on the remaining available behavioral metrics without throwing an error.
+

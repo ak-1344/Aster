@@ -1,11 +1,11 @@
 # ASTER Setup & Installation Guide
 
-This document provides the canonical steps to install, configure, and run the ASTER platform locally.
+This document provides the canonical steps to install, configure, run, and troubleshoot the ASTER platform locally.
 
 ## Prerequisites
 *   **Python:** version 3.11 or higher.
 *   **Git:** to clone the repository.
-*   **Google Gemini API Key:** required for the LLM-driven planning and reasoning phases.
+*   **Google Gemini API Key:** (Optional) required for LLM-driven planning and reasoning phases. Without it, ASTER uses deterministic rule-based fallback routing.
 
 ---
 
@@ -43,7 +43,7 @@ pip install -r backend/requirements.txt
 ASTER uses the **Credit Card Customers (CC GENERAL)** dataset for its segmentation workflows. Because raw dataset files are ignored by git (`.gitignore`), you must either provide the real dataset or bootstrap a synthetic one.
 
 **Option A: Fast Local Bootstrap (Recommended for testing)**
-We provide a script to generate a schema-compatible synthetic CSV for local demos and tests.
+We provide a script to generate a schema-compatible synthetic CSV for local demos and tests:
 
 ```bash
 python scripts/bootstrap_sample_data.py
@@ -51,40 +51,41 @@ python scripts/bootstrap_sample_data.py
 *(This writes a synthetic `CC GENERAL.csv` directly into `backend/data/raw/`)*
 
 **Option B: Manual Placement (For real analytics)**
-Download the `CC GENERAL.csv` from [Kaggle — Credit Card Dataset for Clustering](https://www.kaggle.com/datasets/arjunbhasin2013/ccdata) and place it exactly at:
+Download `CC GENERAL.csv` from [Kaggle — Credit Card Dataset for Clustering](https://www.kaggle.com/datasets/arjunbhasin2013/ccdata) and place it at:
 `backend/data/raw/CC GENERAL.csv`
 
 ---
 
-## 3. Environment Configuration
+## 3. Environment Configuration (`.env`)
 
-ASTER reads configuration from environment variables. You can set these in your shell or place them in a `.env` file at the root of the repository. 
+ASTER reads configuration variables directly from your environment or a `.env` file at the root of the repository.
 
 Copy the example file to create your own configuration:
 ```bash
 cp .env.example .env
 ```
 
-### Required Variables
+### Required / Recommended Variables
 
-*   **`GEMINI_API_KEY`**: Your Google Gemini API key. Without this, the pipeline will fall back to rule-based execution for all queries.
+*   **`GEMINI_API_KEY`**: Your Google Gemini API key. If omitted or unreachable, ASTER seamlessly falls back to deterministic rule-based planning.
 
-### Optional Configuration / Toggles
+### Explainability Configuration (`EXPLAINABILITY_MODE`)
 
-*   **`EXPLAINABILITY_MODE`**: Controls the surrogate-model explainability engine.
-    *   `shap` (default): Uses SHAP `TreeExplainer` for feature attribution.
-    *   `lime`: Uses LIME `TabularExplainer` for feature attribution.
-    *   `rule_based`: Bypasses surrogate models entirely and uses a fast, centroid-distance rule calculation (this is also the automatic fallback if SHAP/LIME times out or fails).
-*   **`GEMINI_TIMEOUT_SECONDS`**: Sets the maximum time (in seconds) the system will wait for a structured LLM response before triggering deterministic fallbacks. 
-    *   *Default: `10`*
-*   **`GEMINI_MODEL`**: Specifies the exact Gemini model to use for planning.
-    *   *Default: `gemini-2.5-flash`*
+**Yes, explainability mode is controlled directly by environment variables!**
+ASTER reads `EXPLAINABILITY_MODE` from your `.env` file or shell environment (`os.environ.get("EXPLAINABILITY_MODE", "shap")`).
+
+*   **`EXPLAINABILITY_MODE`**: Controls the surrogate-model explainability engine:
+    *   `shap` (default): Fits a Random Forest surrogate model and uses SHAP (`TreeExplainer`) for feature attribution per cluster.
+    *   `lime`: Fits a Random Forest surrogate model and uses LIME (`LimeTabularExplainer`) for feature attribution per cluster.
+    *   `rule_based`: Bypasses surrogate models entirely and uses fast centroid-distance calculation (this is also the automatic fallback if SHAP or LIME times out or fails).
+*   **`GEMINI_TIMEOUT_SECONDS`**: Sets the maximum wait time (in seconds) for LLM responses (default: `10`).
+*   **`GEMINI_MODEL`**: Specifies the exact Gemini model to use for planning (default: `gemini-2.5-flash`).
 
 ---
 
 ## 4. Running the Application
 
-ASTER serves both the backend API and the static frontend from a single FastAPI process.
+ASTER serves both the backend REST/WebSocket API and the static frontend from a single process.
 
 From the **repository root**, run:
 
@@ -92,19 +93,51 @@ From the **repository root**, run:
 python backend/main.py
 ```
 
-*   **Dashboard:** Open a browser and navigate to `http://127.0.0.1:8000/` to use the chat interface.
-*   **API Docs:** Navigate to `http://127.0.0.1:8000/docs` to view the auto-generated Swagger UI.
+*   **Main Chat Interface:** Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+*   **Telemetry Dashboard UI:** Open [http://127.0.0.1:8000/dashboard-ui](http://127.0.0.1:8000/dashboard-ui)
+*   **Interactive API Docs (Swagger):** Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
-## 5. Running the Test Suite
+## 5. Troubleshooting: Common Errors
 
-ASTER includes a comprehensive smoke and unit test suite ensuring all modules, dependencies, and execution paths remain stable.
+### Error: `[Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use`
 
-To run the full suite, execute:
+**Cause:** Another process (such as a previously started Uvicorn server or background process) is already listening on port `8000`.
+
+**Resolution:**
+
+**Option 1 (Recommended):** Kill the existing process bound to port 8000.
+```bash
+# On Linux / macOS:
+fuser -k 8000/tcp
+
+# Or find PID and kill manually:
+lsof -ti:8000 | xargs kill -9
+
+# On Windows:
+netstat -ano | findstr :8000
+taskkill /PID <PID_NUMBER> /F
+```
+
+Then re-run:
+```bash
+python backend/main.py
+```
+
+**Option 2:** Access the server that is already running at `http://127.0.0.1:8000/`.
+
+---
+
+## 6. Running the Test Suite
+
+ASTER includes a unit and integration test suite ensuring all modules, dependencies, and fallback paths remain stable.
+
+To run the full suite:
 
 ```bash
 python -m unittest discover -s backend/tests -p "test_*.py" -v
 ```
 
-*Note: The test suite includes LLM integration smoke tests. If `GEMINI_API_KEY` is not set, or the API is unreachable, the system will seamlessly exercise the deterministic fallback paths instead, and the tests should still pass.*
+*Note: The test suite runs cleanly with or without a `GEMINI_API_KEY` set.*
+
