@@ -5,69 +5,113 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ASTER — Metrics Dashboard</title>
   <style>
+
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
     :root {
       color-scheme: light;
-      --bg: #f4efe7;
-      --panel: #fffaf2;
-      --ink: #10222e;
-      --muted: #60707d;
-      --accent: #0e6f66;
-      --border: rgba(16, 34, 46, 0.12);
-      --shadow: 0 18px 60px rgba(16, 34, 46, 0.10);
+      --base: #d8e2e8;
+      --light-shadow: #ffffff;
+      --dark-shadow: #b0c0ce;
+      --glass-bg: rgba(255, 255, 255, 0.45);
+      --glass-border: rgba(255, 255, 255, 0.6);
+      --accent: #0a5c55;
+      --glow: #00bda6;
+      --ink: #1f2937;
+      --muted: #64748b;
+      --font-display: 'Outfit', system-ui, sans-serif;
+      --font-data: 'JetBrains Mono', monospace;
+      --font-body: system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: linear-gradient(180deg, #fbf7f0 0%, #efe6d8 100%);
+      font-family: var(--font-body);
+      background: var(--base);
       color: var(--ink);
       min-height: 100vh;
       padding: 24px;
     }
-    .shell { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
-    .hero, .panel {
-      background: rgba(255, 250, 242, 0.9);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 22px;
-    }
-    h1, h2 { margin: 0 0 10px; }
+    .shell { max-width: 1180px; margin: 0 auto; display: grid; gap: 24px; }
+    h1, h2, h3 { font-family: var(--font-display); margin: 0 0 10px; color: var(--ink); }
     p, .notice { margin: 0; color: var(--muted); line-height: 1.5; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
-    
-    /* Flowchart styles */
-    .flowchart-container {
+
+    /* Neumorphic Utilities */
+    .neu-surface {
+      background: var(--base);
+      border-radius: 20px;
+      box-shadow: 10px 10px 20px var(--dark-shadow), -10px -10px 20px var(--light-shadow);
+      padding: 24px;
+    }
+    .neu-inset {
+      background: var(--base);
+      border: none;
+      border-radius: 12px;
+      box-shadow: inset 5px 5px 10px var(--dark-shadow), inset -5px -5px 10px var(--light-shadow);
+      padding: 12px 16px;
+      color: var(--ink);
+      font-family: var(--font-body);
       width: 100%;
-      overflow-x: auto;
-      background: rgba(255, 255, 255, 0.65);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      min-height: 200px;
     }
-    .node-box { stroke: var(--ink); stroke-width: 1.5px; rx: 8; ry: 8; }
-    .node-success { fill: #d4edda; }
-    .node-failed { fill: #f8d7da; }
-    .node-skipped { fill: #e2e3e5; }
-    .node-inprogress { fill: #fff3cd; animation: pulse 1s infinite alternate; }
-    .node-gray { fill: #f8f9fa; }
-    @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
-    .node-text { font-family: inherit; font-size: 13px; font-weight: 500; text-anchor: middle; alignment-baseline: middle; fill: var(--ink); }
-    .node-dur { font-family: inherit; font-size: 11px; text-anchor: middle; alignment-baseline: middle; fill: var(--muted); }
-    .edge { stroke: var(--muted); stroke-width: 2px; fill: none; marker-end: url(#arrowhead); }
+    .neu-button {
+      background: var(--base);
+      border: none;
+      border-radius: 12px;
+      box-shadow: 5px 5px 10px var(--dark-shadow), -5px -5px 10px var(--light-shadow);
+      color: var(--accent);
+      font-weight: 700;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: var(--font-display);
+      min-width: 120px;
+    }
+
+    /* Glassmorphic Utilities */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(31, 41, 55, 0.05);
+      padding: 20px;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(31, 41, 55, 0.03);
+    }
+    .glass-token {
+      background: rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--glass-border);
+      border-radius: 30px;
+      padding: 8px 16px;
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-data);
+      font-size: 0.85rem;
+      color: var(--ink);
+      transition: all 0.3s ease;
+    }
+
+    .query-row { display: grid; gap: 16px; grid-template-columns: 1fr auto; margin-top: 20px; }
+    .grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
     
-    .status-indicator {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 6px;
-    }
-    .status-connected { background-color: #28a745; }
-    .status-disconnected { background-color: #dc3545; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(31, 41, 55, 0.1); vertical-align: top; }
+    th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-display); }
+    .metric { font-size: 2rem; font-weight: 800; color: var(--accent); font-family: var(--font-data); }
+    pre { white-space: pre-wrap; word-break: break-word; background: rgba(255,255,255,0.5); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border); font-size: 0.85rem; font-family: var(--font-data); }
+    .data-number { font-family: var(--font-data); }
+    .scatter-wrap { display: grid; gap: 6px; }
+    .dot-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); font-family: var(--font-data); }
+
   </style>
 </head>
 <body>
