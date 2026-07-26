@@ -9,3 +9,4 @@ plotly
 google-genai
 python-dotenv
 pydantic
+httpx2
