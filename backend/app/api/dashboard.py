@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import sqlite3
 from typing import Any
+import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from backend.app.decision_memory.decision_memory import _DEFAULT_DB_PATH
+from backend.app.dashboard import event_bus
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -113,3 +115,21 @@ def get_query_graph(query_id: int) -> list[dict[str, Any]]:
         return result
     finally:
         conn.close()
+
+@router.websocket("/live")
+async def websocket_live(websocket: WebSocket):
+    """Stream live events from the scheduler."""
+    await websocket.accept()
+    q = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    event_bus.subscribe(q, loop)
+    try:
+        while True:
+            event = await q.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        event_bus.unsubscribe(q, loop)
