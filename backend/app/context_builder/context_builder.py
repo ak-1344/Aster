@@ -45,6 +45,9 @@ class QueryContext:
 	dataset_path: Path = DEFAULT_DATASET_PATH
 	notes: list[str] = field(default_factory=list)
 	unsupported_filters: list[dict[str, str]] = field(default_factory=list)
+	requested_fields: list[str] | None = None
+	top_n: int | None = None
+	unsupported_output_fields: list[dict[str, str]] = field(default_factory=list)
 
 	def to_dict(self) -> dict[str, Any]:
 		"""Return a JSON-serializable representation of the context."""
@@ -59,7 +62,71 @@ class QueryContext:
 			"dataset_path": str(self.dataset_path),
 			"notes": self.notes,
 			"unsupported_filters": self.unsupported_filters,
+			"requested_fields": self.requested_fields,
+			"top_n": self.top_n,
+			"unsupported_output_fields": self.unsupported_output_fields,
 		}
+
+
+def extract_and_validate_output_fields(normalized_query: str, dataset_path: Path) -> tuple[list[str] | None, int | None, list[dict[str, str]]]:
+	"""Extract requested fields and row limits, and validate against dataset."""
+	
+	top_n = None
+	top_match = re.search(r"(?:top|first)\s+(\d+)", normalized_query)
+	if top_match:
+		top_n = int(top_match.group(1))
+
+	FIELD_SYNONYMS = {
+		"customer id": "CUST_ID",
+		"id": "CUST_ID",
+		"customer": "CUST_ID",
+		"balance": "BALANCE",
+		"purchases": "PURCHASES",
+		"spending": "PURCHASES",
+		"spent": "PURCHASES",
+		"credit limit": "CREDIT_LIMIT",
+		"payments": "PAYMENTS",
+		"tenure": "TENURE",
+		"name": "name",
+		"names": "name",
+		"income": "income",
+		"salary": "income",
+	}
+
+	target_phrases = ["just", "only", "show me"]
+	has_indicator = any(phrase in normalized_query for phrase in target_phrases)
+	requested_fields = []
+	unsupported_output_fields = []
+
+	if has_indicator or top_n is not None:
+		search_text = normalized_query
+
+		extracted_synonyms = []
+		sorted_keys = sorted(FIELD_SYNONYMS.keys(), key=len, reverse=True)
+		for key in sorted_keys:
+			if key in search_text:
+				extracted_synonyms.append((key, FIELD_SYNONYMS[key]))
+				search_text = search_text.replace(key, "")
+				
+		if extracted_synonyms:
+			try:
+				df = pd.read_csv(dataset_path, nrows=0)
+				columns = [col.upper() for col in df.columns]
+			except Exception:
+				columns = []
+				
+			for key, mapped_col in extracted_synonyms:
+				if mapped_col in columns:
+					if mapped_col not in requested_fields:
+						requested_fields.append(mapped_col)
+				else:
+					unsupported_output_fields.append({
+						"requested": key,
+						"reason": "no matching column in current dataset"
+					})
+					
+	return requested_fields if requested_fields or unsupported_output_fields else None, top_n, unsupported_output_fields
+
 
 
 def normalize_query(query: str) -> str:
@@ -160,6 +227,11 @@ def build_context(query: str, dataset_path: str | Path | None = None) -> dict[st
 	if cluster_match:
 		filters["n_clusters"] = int(cluster_match.group(1))
 
+	unsupported_filters = extract_and_validate_filters(normalized_query, resolved_dataset_path)
+	requested_fields, top_n, unsupported_output_fields = extract_and_validate_output_fields(normalized_query, resolved_dataset_path)
+	
+	unsupported_filters.extend(unsupported_output_fields)
+
 	context = QueryContext(
 		raw_query=query,
 		normalized_query=normalized_query,
@@ -168,6 +240,9 @@ def build_context(query: str, dataset_path: str | Path | None = None) -> dict[st
 		filters=filters,
 		output_format=output_format,
 		dataset_path=resolved_dataset_path,
-		unsupported_filters=extract_and_validate_filters(normalized_query, resolved_dataset_path),
+		unsupported_filters=unsupported_filters,
+		requested_fields=requested_fields,
+		top_n=top_n,
+		unsupported_output_fields=unsupported_output_fields,
 	)
 	return context.to_dict()

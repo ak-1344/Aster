@@ -15,6 +15,7 @@ from backend.app.nodes import (
     recommendation_node,
     segmentation_node,
     visualization_node,
+    lookup_node,
 )
 
 
@@ -87,6 +88,11 @@ def _execute_node(node_name: str, context: dict[str, Any]) -> dict[str, Any]:
             if features is None or labels is None:
                 raise SchedulerExecutionError("customer_features or cluster_labels not found in context for visualization")
             return visualization_node.build_visualization_payload(features, labels)
+        elif node_name == "lookup":
+            return lookup_node.perform_lookup(
+                dataset_path=context.get("dataset_path"),
+                query_context=context.get("query_context", {})
+            )
         else:
             raise SchedulerExecutionError(f"Unknown node: {node_name}")
     except Exception as e:
