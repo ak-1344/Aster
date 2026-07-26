@@ -59,6 +59,26 @@ This document outlines the current capabilities of the ASTER platform from a use
 **What it does:** Caches executed analytical plans and outputs in a SQLite database (`backend/data/decision_memory.db`). Repeated queries bypass LLM and clustering latency, returning stored results instantaneously with cache metadata flags.
 **What triggers it:** Submitting an identical query twice.
 
+### 12. Query Clarification & Human-in-the-Loop (Active Learning)
+**What it does:** Prevents the system from making dangerous assumptions on ambiguous queries. If a query is too vague (e.g., just saying "high value customers" without a numeric threshold or known tier), ASTER immediately halts execution. It returns a `clarification_needed` status and asks the user for clarification. No execution nodes are triggered, and no incorrect assumptions pollute the decision memory.
+**What triggers it:** Ambiguous queries lacking explicit intent, unsupported filter-only queries, or missing numeric thresholds.
+**Example query:** *"high value customers"*
+
+### 13. TF-IDF Semantic Intent Routing
+**What it does:** Provides robust, offline natural-language understanding for queries that don't use exact keywords. Instead of brittle token matching, ASTER uses a Scikit-learn TF-IDF vectorizer to find semantic similarity against labeled intent examples. This ensures accurate routing even when the Gemini API is disabled.
+**What triggers it:** Any query processed by the Context Builder.
+
+### 14. Persona Catalog & Product Recommendation Tools
+**What it does:** Integrates a fully structured persona catalog (`The Transactors`, `The Revolvers`, `Cash-Advance Reliant`, `Dormant / Low Activity`) directly into the segmentation toolset (`backend/app/tools/segmentation.py`). It automatically maps clusters to these personas and pairs them with specific retail banking products, providing targeted marketing advice.
+**What triggers it:** Segmentation workflows mapping customers to business recommendations.
+
+### 15. Borderline Customer Signal
+**What it does:** Detects when a customer is mathematically stranded between two clusters. It calculates a `boundary_distance_ratio` to flag cases where a customer is a borderline fit (ratio > 0.85). The explanations explicitly surface this nuance, noting when a customer is "borderline between Segment X and Segment Y".
+**What triggers it:** Customer explanation requests or reading explanations for top customers in a cluster.
+
+### 16. Structured Markdown Output Formats
+**What it does:** Ensures consistent, highly readable agent answers. Responses are formatted into a strict four-section Markdown structure: (1) Query-Aware Execution Summary, (2) Primary Finding & Persona Match, (3) Target Customer Table, and (4) Strategic Marketing Recommendation.
+**What triggers it:** All analytical workflows return this structured Markdown payload.
 
 ---
 
