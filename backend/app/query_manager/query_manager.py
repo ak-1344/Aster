@@ -73,7 +73,33 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
         "analytical_intent": planner_output.get("intent", context["intent"]),
     }
 
-    node_outputs = execute_graph(graph, initial_context)
+    from backend.app.scheduler.scheduler import SchedulerExecutionError
+
+    try:
+        node_outputs = execute_graph(graph, initial_context)
+    except SchedulerExecutionError as e:
+        node_outputs = getattr(e, 'partial_outputs', {})
+        node_summary = {
+            node: {
+                "type": type(output).__name__,
+                "duration_ms": output.get("_duration_ms", 0) if isinstance(output, dict) else 0,
+                "status": output.get("_status", "failed") if isinstance(output, dict) else "failed"
+            }
+            for node, output in node_outputs.items()
+        }
+        try:
+            dm_store(
+                query_text=query,
+                response={"error": str(e)},
+                execution_graph_summary=list(node_outputs.keys()),
+                chosen_algorithm=None,
+                node_outputs_summary=node_summary,
+                explanation_summary=None
+            )
+        except Exception:
+            pass
+        raise
+
     explanations = generate_explanations(node_outputs)
     response = compose_response(
         workflow_name=graph.workflow_name,
@@ -91,7 +117,11 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
         execution_graph_summary = list(node_outputs.keys())
         chosen_algorithm = node_outputs.get("segmentation", {}).get("chosen_algorithm")
         node_summary = {
-            node: {"type": type(output).__name__}
+            node: {
+                "type": type(output).__name__,
+                "duration_ms": output.get("_duration_ms", 0) if isinstance(output, dict) else 0,
+                "status": output.get("_status", "success") if isinstance(output, dict) else "success"
+            }
             for node, output in node_outputs.items()
         }
         explanation_summary = {

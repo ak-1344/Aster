@@ -11,9 +11,11 @@ from pydantic import BaseModel, Field
 
 from backend.app.query_manager.query_manager import execute_query
 from backend.app.query_manager.dataset_manager import process_upload
+from backend.app.api.dashboard import router as dashboard_router
 
 
 app = FastAPI(title="ASTER")
+app.include_router(dashboard_router)
 
 
 class QueryRequest(BaseModel):

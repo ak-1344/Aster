@@ -111,8 +111,24 @@ def execute_graph(graph: ExecutionGraph, initial_context: dict[str, Any]) -> dic
     context = initial_context
     outputs: dict[str, Any] = {}
 
+    import time
     for node_name in execution_order:
-        node_output = _execute_node(node_name, context)
-        outputs[node_name] = node_output
+        start_time = time.perf_counter()
+        try:
+            node_output = _execute_node(node_name, context)
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            if isinstance(node_output, dict):
+                node_output["_status"] = "success"
+                node_output["_duration_ms"] = duration_ms
+            outputs[node_name] = node_output
+        except SchedulerExecutionError as e:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            outputs[node_name] = {
+                "_status": "failed",
+                "_duration_ms": duration_ms,
+                "error": str(e)
+            }
+            e.partial_outputs = outputs
+            raise
 
     return outputs
