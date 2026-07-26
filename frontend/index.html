@@ -78,6 +78,7 @@
         <button id="run-button">Run Query</button>
       </div>
       <p id="status-line" class="notice" style="margin-top:10px;">Ready.</p>
+      <div id="unsupported-filters-notice" class="notice" style="display: none; color: #b73a3a; margin-top: 10px; font-weight: bold; padding: 10px; background: rgba(183, 58, 58, 0.1); border-radius: 8px;"></div>
     </section>
 
     <section class="grid">
@@ -135,6 +136,7 @@
     const clusterTable = document.getElementById('cluster-table');
     const visualizations = document.getElementById('visualizations');
     const statistics = document.getElementById('statistics');
+    const unsupportedFiltersNotice = document.getElementById('unsupported-filters-notice');
 
     function renderTable(rows) {
       if (!rows || !rows.length) return '<div class="notice">No rows.</div>';
@@ -194,6 +196,14 @@
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || 'Query failed');
+
+        if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
+          const names = payload.unsupported_filters.map(f => f.requested).join(', ');
+          unsupportedFiltersNotice.style.display = 'block';
+          unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
+        } else {
+          unsupportedFiltersNotice.style.display = 'none';
+        }
 
         workflowMeta.innerHTML = `
           <div><strong>Workflow:</strong> ${payload.workflow_name}</div>
