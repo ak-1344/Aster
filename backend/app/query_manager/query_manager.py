@@ -91,7 +91,7 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
             dm_store(
                 query_text=query,
                 response={"error": str(e)},
-                execution_graph_summary=list(node_outputs.keys()),
+                execution_graph_summary=[node.to_dict() for node in graph.nodes],
                 chosen_algorithm=None,
                 node_outputs_summary=node_summary,
                 explanation_summary=None
@@ -114,7 +114,7 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
 
     # --- Decision memory cache write (fire-and-forget) ---
     try:
-        execution_graph_summary = list(node_outputs.keys())
+        execution_graph_summary = [node.to_dict() for node in graph.nodes]
         chosen_algorithm = node_outputs.get("segmentation", {}).get("chosen_algorithm")
         node_summary = {
             node: {

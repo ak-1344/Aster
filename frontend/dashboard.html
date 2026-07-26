@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASTER — Metrics Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe7;
+      --panel: #fffaf2;
+      --ink: #10222e;
+      --muted: #60707d;
+      --accent: #0e6f66;
+      --border: rgba(16, 34, 46, 0.12);
+      --shadow: 0 18px 60px rgba(16, 34, 46, 0.10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, #fbf7f0 0%, #efe6d8 100%);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .shell { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
+    .hero, .panel {
+      background: rgba(255, 250, 242, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    h1, h2 { margin: 0 0 10px; }
+    p, .notice { margin: 0; color: var(--muted); line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    
+    /* Flowchart styles */
+    .flowchart-container {
+      width: 100%;
+      overflow-x: auto;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      min-height: 200px;
+    }
+    .node-box { stroke: var(--ink); stroke-width: 1.5px; rx: 8; ry: 8; }
+    .node-success { fill: #d4edda; }
+    .node-failed { fill: #f8d7da; }
+    .node-skipped { fill: #e2e3e5; }
+    .node-inprogress { fill: #fff3cd; animation: pulse 1s infinite alternate; }
+    .node-gray { fill: #f8f9fa; }
+    @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+    .node-text { font-family: inherit; font-size: 13px; font-weight: 500; text-anchor: middle; alignment-baseline: middle; fill: var(--ink); }
+    .node-dur { font-family: inherit; font-size: 11px; text-anchor: middle; alignment-baseline: middle; fill: var(--muted); }
+    .edge { stroke: var(--muted); stroke-width: 2px; fill: none; marker-end: url(#arrowhead); }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-connected { background-color: #28a745; }
+    .status-disconnected { background-color: #dc3545; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1>ASTER — Metrics Dashboard</h1>
+      <p>Live node performance and query execution monitoring.</p>
+      <div style="margin-top: 10px; font-size: 0.85rem;">
+        <span id="ws-status" class="status-indicator status-disconnected"></span>
+        <span id="ws-status-text">Live updates disconnected</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Node Performance Stats</h2>
+      <div id="node-stats-table" class="notice">Loading stats...</div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Queries</h2>
+      <div id="recent-queries-table" class="notice">Loading queries...</div>
+    </section>
+
+    <section class="panel">
+      <h2>Execution Chain Diagram <span id="current-query-id" style="font-size: 0.9rem; font-weight: normal; color: var(--muted);"></span></h2>
+      <div class="flowchart-container" id="diagram-container">
+        <div class="notice">Select a query to view its execution chain, or wait for a new query to start.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Configuration
+    const NODE_WIDTH = 140;
+    const NODE_HEIGHT = 50;
+    const X_SPACING = 50;
+    const Y_SPACING = 80;
+    
+    let currentQueryGraph = null;
+    let nodeStats = null;
+
+    async function fetchNodeStats() {
+      try {
+        const res = await fetch('/dashboard/node-stats');
+        const data = await res.json();
+        
+        const rows = Object.entries(data).map(([node, stats]) => {
+          return `<tr>
+            <td><strong>${node}</strong></td>
+            <td>${stats.call_count}</td>
+            <td>${stats.success_count}</td>
+            <td>${stats.failure_count}</td>
+            <td>${stats.avg_duration_ms} ms</td>
+          </tr>`;
+        }).join('');
+        
+        document.getElementById('node-stats-table').innerHTML = `
+          <table>
+            <tr><th>Node</th><th>Calls</th><th>Success</th><th>Failed</th><th>Avg Duration</th></tr>
+            ${rows}
+          </table>
+        `;
+      } catch (err) {
+        document.getElementById('node-stats-table').innerHTML = `<div class="notice">Failed to load stats: ${err.message}</div>`;
+      }
+    }
+
+    // Static diagram rendering
+    function renderDiagram(nodes) {
+      if (!nodes || nodes.length === 0) {
+        document.getElementById('diagram-container').innerHTML = '<div class="notice">No execution graph available.</div>';
+        return;
+      }
+
+      // Simple layout: position nodes in layers based on dependencies
+      // Map node name to node object
+      const nodeMap = {};
+      nodes.forEach(n => { nodeMap[n.node_name] = { ...n, layer: 0, incoming: 0, x: 0, y: 0 }; });
+      
+      // Calculate layers
+      let changed = true;
+      let iters = 0;
+      while (changed && iters < 100) {
+        changed = false;
+        nodes.forEach(n => {
+          const currentLayer = nodeMap[n.node_name].layer;
+          let maxDepLayer = -1;
+          (n.dependencies || []).forEach(dep => {
+            if (nodeMap[dep]) {
+              maxDepLayer = Math.max(maxDepLayer, nodeMap[dep].layer);
+            }
+          });
+          if (maxDepLayer >= currentLayer) {
+            nodeMap[n.node_name].layer = maxDepLayer + 1;
+            changed = true;
+          }
+        });
+        iters++;
+      }
+
+      // Assign X/Y coordinates
+      const layerCounts = {};
+      const layerHeights = {};
+      nodes.forEach(n => {
+        const l = nodeMap[n.node_name].layer;
+        layerCounts[l] = (layerCounts[l] || 0) + 1;
+        const index = layerCounts[l] - 1;
+        nodeMap[n.node_name].x = l * (NODE_WIDTH + X_SPACING) + 50;
+        nodeMap[n.node_name].y = index * (NODE_HEIGHT + Y_SPACING) + 50;
+        layerHeights[l] = Math.max(layerHeights[l] || 0, nodeMap[n.node_name].y + NODE_HEIGHT + 50);
+      });
+
+      const maxLayer = Math.max(...Object.keys(layerCounts).map(Number));
+      const width = (maxLayer + 1) * (NODE_WIDTH + X_SPACING) + 100;
+      const height = Math.max(...Object.values(layerHeights), 200);
+
+      let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--muted)" />
+          </marker>
+        </defs>`;
+
+      // Draw edges
+      nodes.forEach(n => {
+        const target = nodeMap[n.node_name];
+        (n.dependencies || []).forEach(dep => {
+          if (nodeMap[dep]) {
+            const source = nodeMap[dep];
+            const startX = source.x + NODE_WIDTH;
+            const startY = source.y + NODE_HEIGHT / 2;
+            const endX = target.x;
+            const endY = target.y + NODE_HEIGHT / 2;
+            
+            // Cubic bezier for smooth curves
+            const ctrl1X = startX + X_SPACING / 2;
+            const ctrl1Y = startY;
+            const ctrl2X = endX - X_SPACING / 2;
+            const ctrl2Y = endY;
+            
+            svg += `<path class="edge" d="M ${startX} ${startY} C ${ctrl1X} ${ctrl1Y}, ${ctrl2X} ${ctrl2Y}, ${endX} ${endY}" />`;
+          }
+        });
+      });
+
+      // Draw nodes
+      nodes.forEach(n => {
+        const node = nodeMap[n.node_name];
+        let statusClass = 'node-gray';
+        if (node.status === 'success') statusClass = 'node-success';
+        else if (node.status === 'failed') statusClass = 'node-failed';
+        else if (node.status === 'skipped') statusClass = 'node-skipped';
+        else if (node.status === 'inprogress') statusClass = 'node-inprogress';
+        
+        svg += `<rect class="node-box ${statusClass}" id="rect-${node.node_name}" x="${node.x}" y="${node.y}" width="${NODE_WIDTH}" height="${NODE_HEIGHT}" />`;
+        svg += `<text class="node-text" x="${node.x + NODE_WIDTH/2}" y="${node.y + 20}">${node.node_name}</text>`;
+        
+        const durText = node.duration_ms !== undefined && node.duration_ms > 0 ? `${node.duration_ms} ms` : (node.status || '');
+        svg += `<text class="node-dur" id="dur-${node.node_name}" x="${node.x + NODE_WIDTH/2}" y="${node.y + 38}">${durText}</text>`;
+      });
+
+      svg += `</svg>`;
+      document.getElementById('diagram-container').innerHTML = svg;
+      currentQueryGraph = nodeMap; // Save for live updates
+    }
+
+    async function loadQueryGraph(id) {
+      document.getElementById('current-query-id').textContent = `(Query #${id})`;
+      try {
+        const res = await fetch(`/dashboard/queries/${id}/graph`);
+        if (!res.ok) throw new Error("Graph not found");
+        const nodes = await res.json();
+        renderDiagram(nodes);
+      } catch (err) {
+        document.getElementById('diagram-container').innerHTML = `<div class="notice">Failed to load graph: ${err.message}</div>`;
+      }
+    }
+
+    // Part 3 placeholder - Event Bus
+    // Live WebSocket connection logic will go here
+
+    // Initial load
+    fetchNodeStats();
+  </script>
+</body>
+</html>

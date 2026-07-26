@@ -48,13 +48,19 @@ def upload_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
 
 def _frontend_html() -> str:
 	"""Load the temporary demo page from the frontend folder."""
-
 	return (Path(__file__).resolve().parents[3] / "frontend" / "index.html").read_text(encoding="utf-8")
 
+def _frontend_dashboard_html() -> str:
+	"""Load the dashboard page from the frontend folder."""
+	return (Path(__file__).resolve().parents[3] / "frontend" / "dashboard.html").read_text(encoding="utf-8")
 
 @app.get("/", response_class=HTMLResponse)
 def root() -> HTMLResponse:
 	"""Serve the temporary demo page."""
-
 	return HTMLResponse(_frontend_html())
+
+@app.get("/dashboard-ui", response_class=HTMLResponse)
+def dashboard_ui() -> HTMLResponse:
+	"""Serve the dashboard page."""
+	return HTMLResponse(_frontend_dashboard_html())
 
