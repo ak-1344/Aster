@@ -14,6 +14,7 @@ def compose_response(
     execution_log: list[dict[str, Any]] | None = None,
     planning_path: str | None = None,
     planner_reasoning: str | None = None,
+    unsupported_filters: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Merge collected node outputs into a single structured response object.
 
@@ -31,6 +32,7 @@ def compose_response(
         "workflow_name": workflow_name,
         "intent": intent,
         "intent_classification": intent_classification,
+        "unsupported_filters": unsupported_filters if unsupported_filters is not None else [],
         "summary": {},
         "statistics": {},
         "recommendations": {},

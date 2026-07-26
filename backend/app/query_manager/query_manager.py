@@ -110,6 +110,7 @@ def execute_query(query: str, dataset_path: str | Path | None = None) -> dict[st
         execution_log=planner_output.get("execution_log", []),
         planning_path=planner_output.get("planning_path"),
         planner_reasoning=planner_output.get("planner_reasoning"),
+        unsupported_filters=context.get("unsupported_filters", []),
     )
 
     # --- Decision memory cache write (fire-and-forget) ---
