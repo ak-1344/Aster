@@ -211,51 +211,51 @@
       <div class="chain-container" id="execution-chain"></div>
     </section>
 
-    <section class="glass-panel" id="agent-answer-panel">
+    <section class="glass-panel" id="agent-answer-panel" style="display: none;">
       <h2>Agent Answer</h2>
-      <div id="agent-answer" class="markdown-body notice">No answer yet.</div>
+      <div id="agent-answer" class="markdown-body"></div>
     </section>
 
-    <section class="grid">
-      <div class="glass-panel">
+    <section class="grid" id="workflow-eval-grid" style="display: none;">
+      <div class="glass-panel" id="workflow-panel">
         <h2>Workflow</h2>
-        <div id="workflow-meta" class="notice">No query run yet.</div>
+        <div id="workflow-meta"></div>
       </div>
-      <div class="glass-panel">
+      <div class="glass-panel" id="evaluation-panel">
         <h2>Evaluation</h2>
-        <div class="metric" id="silhouette-score">--</div>
+        <div class="metric" id="silhouette-score"></div>
         <p class="notice">Silhouette score (segmentation queries only).</p>
       </div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="segment-summaries-panel" style="display: none;">
       <h2>Segment Personas</h2>
-      <div id="segment-summaries" class="notice">No segment summaries yet.</div>
+      <div id="segment-summaries"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="recommendations-panel" style="display: none;">
       <h2>Cluster Recommendations</h2>
-      <div id="recommendations" class="notice">No recommendations yet.</div>
+      <div id="recommendations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="explanations-panel" style="display: none;">
       <h2>Customer Explanations</h2>
-      <div id="explanations" class="notice">No explanations yet.</div>
+      <div id="explanations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="cluster-table-panel" style="display: none;">
       <h2>Cluster Table</h2>
-      <div id="cluster-table" class="notice">No cluster table yet.</div>
+      <div id="cluster-table"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="visualizations-panel" style="display: none;">
       <h2>Charts / Tables</h2>
-      <div id="visualizations" class="notice">No visualization payload yet.</div>
+      <div id="visualizations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="statistics-panel" style="display: none;">
       <h2>Statistics</h2>
-      <pre id="statistics">No statistics yet.</pre>
+      <pre id="statistics"></pre>
     </section>
   </main>
 
@@ -327,20 +327,11 @@
     }
 
     function showClarificationPanel(payload) {
+      hideAllResultPanels();
       pendingOriginalQuery = payload.original_query || queryInput.value.trim();
       clarificationQuestion.textContent = payload.question || 'Please provide more detail.';
       clarificationInput.value = '';
       clarificationPanel.style.display = 'block';
-      workflowMeta.textContent = 'Waiting for clarification.';
-      segmentSummaries.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
-      recommendations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
-      explanations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
-      clusterTable.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
-      visualizations.innerHTML = '<div class="notice">Clarification required before results can be shown.</div>';
-      statistics.textContent = 'No statistics yet.';
-      agentAnswer.classList.add('notice');
-      agentAnswer.innerHTML = 'Clarification required before results can be shown.';
-      silhouetteScore.textContent = '--';
       unsupportedFiltersNotice.style.display = 'none';
     }
 
@@ -351,40 +342,102 @@
       return `<div class="node-chip-list">${nodes.map((node) => `<span class="node-chip">${node}</span>`).join('')}</div>`;
     }
 
+    // --- Generic panel visibility system ---
+    // Each entry: panelId (the section wrapper), a check function (returns true if data exists),
+    // and a render function (populates the content element inside the panel).
+    const PANEL_CONFIG = [
+      {
+        panelId: 'agent-answer-panel',
+        hasData: (p) => !!(p.answer_markdown || p.agent_answer?.markdown),
+        render: (p) => renderAgentAnswer(p),
+      },
+      {
+        panelId: 'workflow-eval-grid',
+        hasData: (p) => !!(p.workflow_name || p.metadata?.nodes_executed?.length),
+        render: (p) => {
+          const nodesExecuted = p.metadata?.nodes_executed || [];
+          const toolsInvoked = p.metadata?.tools_invoked || p.agent_answer?.tools_invoked || [];
+          workflowMeta.innerHTML = `
+            <div><strong>Workflow:</strong> ${p.workflow_name || 'N/A'}</div>
+            <div><strong>Intent:</strong> ${p.intent || 'N/A'}</div>
+            <div><strong>Planning path:</strong> ${p.metadata?.planning_path || 'N/A'}</div>
+            <div><strong>Tools invoked:</strong> ${(toolsInvoked.length ? toolsInvoked.join(', ') : 'none')}</div>
+            <div><strong>Nodes executed:</strong></div>
+            ${renderNodeChips(nodesExecuted)}
+          `;
+          const score = p.summary?.evaluation?.silhouette_score;
+          if (score != null) {
+            silhouetteScore.textContent = score;
+            document.getElementById('evaluation-panel').style.display = '';
+          } else {
+            document.getElementById('evaluation-panel').style.display = 'none';
+          }
+        },
+      },
+      {
+        panelId: 'segment-summaries-panel',
+        hasData: (p) => !!(p.explanations?.segment_summaries?.length),
+        render: (p) => { segmentSummaries.innerHTML = renderTable(p.explanations.segment_summaries); },
+      },
+      {
+        panelId: 'recommendations-panel',
+        hasData: (p) => !!(p.recommendations?.cluster_recommendations?.length),
+        render: (p) => { recommendations.innerHTML = renderTable(p.recommendations.cluster_recommendations); },
+      },
+      {
+        panelId: 'explanations-panel',
+        hasData: (p) => !!(p.explanations?.customer_explanations?.length),
+        render: (p) => { explanations.innerHTML = renderTable((p.explanations.customer_explanations).slice(0, 20)); },
+      },
+      {
+        panelId: 'cluster-table-panel',
+        hasData: (p) => {
+          const targets = p.agent_answer?.target_customers;
+          if (targets && targets.length) return true;
+          return buildClusterTable(p).length > 0;
+        },
+        render: (p) => {
+          const targets = p.agent_answer?.target_customers;
+          clusterTable.innerHTML = renderTable(
+            (targets && targets.length) ? targets : buildClusterTable(p)
+          );
+        },
+      },
+      {
+        panelId: 'visualizations-panel',
+        hasData: (p) => !!(p.visualizations?.scatter || p.visualizations?.cluster_size_bar),
+        render: (p) => { visualizations.innerHTML = renderVisualizations(p.visualizations || {}); },
+      },
+      {
+        panelId: 'statistics-panel',
+        hasData: (p) => !!(p.statistics && Object.keys(p.statistics).length),
+        render: (p) => { statistics.textContent = JSON.stringify(p.statistics, null, 2); },
+      },
+    ];
+
+    function hideAllResultPanels() {
+      PANEL_CONFIG.forEach(({ panelId }) => {
+        document.getElementById(panelId).style.display = 'none';
+      });
+      unsupportedFiltersNotice.style.display = 'none';
+    }
+
     function renderQueryResults(payload) {
       hideClarificationPanel();
+      hideAllResultPanels();
 
       if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
         const names = payload.unsupported_filters.map(f => f.requested).join(', ');
         unsupportedFiltersNotice.style.display = 'block';
         unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
-      } else {
-        unsupportedFiltersNotice.style.display = 'none';
       }
 
-      const nodesExecuted = payload.metadata?.nodes_executed || [];
-      const toolsInvoked = payload.metadata?.tools_invoked || payload.agent_answer?.tools_invoked || [];
-      workflowMeta.innerHTML = `
-        <div><strong>Workflow:</strong> ${payload.workflow_name || 'N/A'}</div>
-        <div><strong>Intent:</strong> ${payload.intent || 'N/A'}</div>
-        <div><strong>Planning path:</strong> ${payload.metadata?.planning_path || 'N/A'}</div>
-        <div><strong>Tools invoked:</strong> ${(toolsInvoked.length ? toolsInvoked.join(', ') : 'none')}</div>
-        <div><strong>Nodes executed:</strong></div>
-        ${renderNodeChips(nodesExecuted)}
-      `;
-
-      renderAgentAnswer(payload);
-      silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive query)';
-      segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
-      recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
-      explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
-      clusterTable.innerHTML = renderTable(
-        (payload.agent_answer?.target_customers && payload.agent_answer.target_customers.length)
-          ? payload.agent_answer.target_customers
-          : buildClusterTable(payload)
-      );
-      visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
-      statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
+      PANEL_CONFIG.forEach(({ panelId, hasData, render }) => {
+        if (hasData(payload)) {
+          document.getElementById(panelId).style.display = '';
+          render(payload);
+        }
+      });
     }
 
     function renderTable(rows) {
@@ -513,6 +566,8 @@
       nodesState = [];
       liveChainPanel.style.display = 'none';
       executionChain.innerHTML = '';
+      hideAllResultPanels();
+      hideClarificationPanel();
 
       try {
         const requestBody = { query };
