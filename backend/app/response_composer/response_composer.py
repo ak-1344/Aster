@@ -110,6 +110,24 @@ def compose_response(
         response["metadata"]["features_path"] = fe_output.get("features_path")
         response["metadata"]["feature_row_count"] = fe_output.get("row_count")
 
+    # Merge lookup output
+    if "lookup" in node_outputs:
+        lookup_output = node_outputs["lookup"]
+        response["results"] = lookup_output.get("results", [])
+        if "unsupported_output_fields" in lookup_output and lookup_output["unsupported_output_fields"]:
+            # Append unsupported output fields to existing unsupported_filters if not already merged in context,
+            # though it's already merged in context builder, it's safe to just extend if present.
+            existing = {f["requested"] for f in response["unsupported_filters"]}
+            for field in lookup_output["unsupported_output_fields"]:
+                if field["requested"] not in existing:
+                    response["unsupported_filters"].append(field)
+                    
+        response.pop("summary", None)
+        response.pop("statistics", None)
+        response.pop("recommendations", None)
+        response.pop("visualizations", None)
+        response.pop("explanations", None)
+
     for node_name, node_output in node_outputs.items():
         llm_assistance = node_output.get("llm_assistance") if isinstance(node_output, dict) else None
         if isinstance(llm_assistance, dict):

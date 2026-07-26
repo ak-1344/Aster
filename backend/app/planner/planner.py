@@ -14,7 +14,7 @@ from backend.app.llm.gemini_client import (
 )
 
 
-VALID_PLAN_INTENTS = {"full_workflow", "explanation_only", "eda_only"}
+VALID_PLAN_INTENTS = {"full_workflow", "explanation_only", "eda_only", "lookup_only"}
 
 
 class InvalidLLMPlan(ValueError):
@@ -77,6 +77,11 @@ NODE_CATALOG: dict[str, dict[str, Any]] = {
         "inputs": ["cluster_labels", "customer_features.csv"],
         "outputs": ["scatter", "cluster_size_bar"],
     },
+    "lookup": {
+        "purpose": "Filter and sort the dataset based on requested fields and limits",
+        "inputs": ["query_context", "backend/data/raw/CC GENERAL.csv"],
+        "outputs": ["results", "unsupported_output_fields"],
+    },
 }
 
 NODE_PREREQUISITES: dict[str, set[str]] = {
@@ -87,6 +92,7 @@ NODE_PREREQUISITES: dict[str, set[str]] = {
     "evaluation": {"feature_engineering", "segmentation"},
     "recommendation": {"feature_engineering", "segmentation"},
     "visualization": {"feature_engineering", "segmentation"},
+    "lookup": set(),
 }
 
 
@@ -98,6 +104,10 @@ def classify_intent(query_context: dict[str, Any]) -> str:
         or query_context.get("raw_query")
         or query_context.get("query", "")
     ).lower()
+
+    requested_fields = query_context.get("requested_fields")
+    top_n = query_context.get("top_n")
+
     explanation_keywords = [
         "explain",
         "why",
@@ -116,9 +126,16 @@ def classify_intent(query_context: dict[str, Any]) -> str:
         "overview",
         "profile",
     ]
+    segmentation_keywords = ["segment", "cluster", "group", "persona"]
+    recommendation_keywords = ["recommend", "offer", "action"]
 
     has_explanation = any(keyword in query_text for keyword in explanation_keywords)
     has_eda = any(keyword in query_text for keyword in eda_keywords)
+    has_segmentation = any(keyword in query_text for keyword in segmentation_keywords)
+    has_recommendation = any(keyword in query_text for keyword in recommendation_keywords)
+
+    if (requested_fields or top_n) and not (has_segmentation or has_explanation or has_recommendation):
+        return "lookup_only"
 
     if has_explanation and not has_eda:
         return "explanation_only"
@@ -212,6 +229,12 @@ def _planner_prompt(context: dict[str, Any], retry_feedback: str = "") -> str:
             "The recommendation node is only needed when the user asks for actions, offers, or recommendations.",
             "The visualization node currently renders customer clusters, so it requires feature_engineering and segmentation first.",
             "Use explanation_only with an empty node_sequence only when no new analytical execution is needed.",
+            "Use lookup_only with the lookup node when the user asks for specific fields, rows, or top N limits without requesting segmentation, explanation, or recommendation.",
+            "Select only the nodes strictly required to answer the query. Do not include explanation, recommendation, or visualization nodes unless the query explicitly asks for them, even if you believe they would be helpful.",
+            "Examples:",
+            'Query: "top 10 customers by balance, just customer ID and balance" -> {"intent": "lookup_only", "node_sequence": ["lookup"], "reasoning": "User requested a direct lookup of specific fields and rows without analytical modelling."}',
+            'Query: "segment my customers into 4 groups" -> {"intent": "full_workflow", "node_sequence": ["feature_engineering", "segmentation"], "reasoning": "User requested clustering."}',
+            'Query: "show me average spending stats" -> {"intent": "eda_only", "node_sequence": ["analytics", "eda"], "reasoning": "User requested descriptive statistics."}',
             f"Query context: {json.dumps(context_for_prompt, sort_keys=True)}",
             f"Node catalog: {json.dumps(catalog, sort_keys=True)}",
             retry_feedback,
@@ -238,6 +261,8 @@ def _validate_node_sequence(intent: str, node_sequence: list[Any]) -> list[str]:
 
     if intent == "explanation_only" and node_sequence:
         raise InvalidLLMPlan("explanation_only plans must not schedule analytical nodes")
+    if intent == "lookup_only" and node_sequence != ["lookup"]:
+        raise InvalidLLMPlan("lookup_only plans must schedule exactly the lookup node")
     if intent == "eda_only" and (
         not node_sequence or any(node not in {"analytics", "eda"} for node in node_sequence)
     ):
@@ -307,6 +332,8 @@ def _build_rule_based_fallback(context: dict[str, Any]) -> tuple[str, list[PlanS
 
     if intent_classification == "explanation_only":
         return intent_classification, []
+    if intent_classification == "lookup_only":
+        return intent_classification, _build_steps_from_sequence(["lookup"])
     if intent_classification == "eda_only":
         return intent_classification, _build_descriptive_steps()
     if analytical_intent == "segmentation":

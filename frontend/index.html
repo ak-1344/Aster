@@ -339,11 +339,11 @@
           <div><strong>Nodes:</strong> ${(payload.metadata?.nodes_executed || []).join(', ')}</div>
         `;
 
-        silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive query)';
+        silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive or lookup query)';
         segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
         recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
         explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
-        clusterTable.innerHTML = renderTable(buildClusterTable(payload));
+        clusterTable.innerHTML = payload.results ? renderTable(payload.results) : renderTable(buildClusterTable(payload));
         visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
         statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
         statusLine.textContent = 'Done.';
