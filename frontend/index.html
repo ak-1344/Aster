@@ -200,7 +200,15 @@
       if (!rows || !rows.length) return '<div class="notice">No rows.</div>';
       const headers = Object.keys(rows[0]);
       const head = '<tr>' + headers.map((h) => `<th>${h}</th>`).join('') + '</tr>';
-      const body = rows.map((row) => '<tr>' + headers.map((h) => `<td>${row[h] ?? ''}</td>`).join('') + '</tr>').join('');
+      const body = rows.map((row) => '<tr>' + headers.map((h) => {
+        let val = row[h];
+        if (Array.isArray(val)) {
+          val = val.map(v => typeof v === 'object' ? JSON.stringify(v) : v).join(', ');
+        } else if (typeof val === 'object' && val !== null) {
+          val = JSON.stringify(val);
+        }
+        return `<td>${val ?? ''}</td>`;
+      }).join('') + '</tr>').join('');
       return `<table>${head}${body}</table>`;
     }
 
