@@ -174,10 +174,27 @@ python backend/main.py
 * **API Documentation:** Open `http://127.0.0.1:8000/docs` for Swagger UI.
 
 ### 7. Run the Test Suite
-Execute the full smoke and unit test suite (49 tests):
+Execute the full smoke and unit test suite from the repository root:
 ```bash
-python -m unittest discover -s backend/tests -p "test_*.py" -v
+python -m unittest discover -s backend/tests -t .
 ```
+
+See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for six judge-facing example queries with expected behaviors.
+
+---
+
+## 🎯 Judge Example Queries
+
+| # | Query | Expected behavior |
+|---|-------|-------------------|
+| 1 | `show descriptive statistics for the dataset` | Descriptive workflow (`analytics`, `eda` only) |
+| 2 | `segment customers into 3 clusters` | Full segmentation workflow with node chips |
+| 3 | `Find customers suitable for investment products` | Business-phrased segmentation (ISSUE-007) |
+| 4 | `high value customers` | Clarification needed — threshold ambiguity (ISSUE-008) |
+| 5 | `Show premium customers from Chennai.` | Segmentation runs; unsupported city filter notice (ISSUE-009) |
+| 6 | `explain why this customer is in this segment` | Explanation-only, zero nodes executed |
+
+Full walkthrough: [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md)
 
 ---
 
@@ -262,6 +279,7 @@ Detailed architectural and workflow documentation is maintained in the `docs/` f
 * 🏛️ **[Architecture Overview](docs/ARCHITECTURE.md)**: In-depth module responsibilities, request flow DAG, model registry, and decision memory design.
 * ✨ **[Features Guide](docs/FEATURES.md)**: Functional breakdown of EDA, segmentation, persona generation, surrogate explainability, and LLM vs. deterministic boundaries.
 * 🔄 **[User Workflow Guide](docs/USER_WORKFLOW.md)**: End-to-end walkthroughs of EDA queries, full segmentation, explanation follow-ups, and cache-hit mechanics.
+* 🎬 **[Demo Script for Judges](docs/DEMO_SCRIPT.md)**: Six example queries with expected UI and API behaviors.
 * ⚙️ **[Setup & Installation Guide](docs/SETUP.md)**: Canonical setup, environment variables, bootstrap scripts, and testing instructions.
 
 ---

@@ -83,7 +83,7 @@ class NodeSmokeTests(unittest.TestCase):
         result = orchestrate_query("show descriptive statistics for the dataset")
         self.assertTrue(result["executable"])
         self.assertEqual(result["intent"], "descriptive")
-        self.assertEqual(result["plan"]["entrypoint"], "analytics")
+        self.assertEqual(result["plan"]["entrypoint"], "eda")
 
     def test_planner_builds_segmentation_workflow(self) -> None:
         context = build_context("segment customers into 4 clusters")
@@ -91,8 +91,8 @@ class NodeSmokeTests(unittest.TestCase):
         self.assertTrue(plan["executable"])
         self.assertEqual(plan["workflow_name"], "segmentation_workflow")
         self.assertEqual(plan["entrypoint"], "feature_engineering")
-        self.assertEqual(plan["exitpoint"], "visualization")
-        self.assertEqual(plan["step_count"], 5)
+        self.assertEqual(plan["exitpoint"], "recommendation")
+        self.assertEqual(plan["step_count"], 3)
 
     def test_query_normalization_and_intent_routing(self) -> None:
         self.assertEqual(normalize_query("  Segment! Customers??  "), "segment customers")

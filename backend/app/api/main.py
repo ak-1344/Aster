@@ -21,6 +21,10 @@ app.include_router(dashboard_router)
 class QueryRequest(BaseModel):
 	query: str = Field(..., min_length=1, description="Natural-language analytical query")
 	dataset_id: str | None = Field(None, description="Optional dataset ID from a previous upload")
+	clarification_response: str | None = Field(
+		None,
+		description="Optional user reply when a prior response returned clarification_needed",
+	)
 
 @app.post("/query")
 def post_query(body: QueryRequest) -> dict[str, Any]:
@@ -32,7 +36,11 @@ def post_query(body: QueryRequest) -> dict[str, Any]:
 		if not dataset_path.exists():
 			raise HTTPException(status_code=400, detail=f"Dataset {body.dataset_id} not found")
 
-	return execute_query(body.query, dataset_path=dataset_path)
+	return execute_query(
+		body.query,
+		dataset_path=dataset_path,
+		clarification_response=body.clarification_response,
+	)
 
 @app.post("/upload")
 def upload_dataset(file: UploadFile = File(...)) -> dict[str, Any]:

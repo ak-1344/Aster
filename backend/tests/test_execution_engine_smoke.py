@@ -25,7 +25,7 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
         self.assertEqual(graph.intent, "segmentation")
         self.assertGreater(len(graph.nodes), 0)
         self.assertEqual(graph.entrypoint, "feature_engineering")
-        self.assertEqual(graph.exitpoint, "visualization")
+        self.assertEqual(graph.exitpoint, "recommendation")
 
     def test_execution_graph_gets_execution_order(self) -> None:
         """Test that execution graph returns nodes in dependency order."""
@@ -53,8 +53,7 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
         self.assertEqual(graph.workflow_name, "descriptive_workflow")
         self.assertEqual(graph.intent, "descriptive")
         execution_order = graph.get_execution_order()
-        self.assertIn("analytics", execution_order)
-        self.assertIn("eda", execution_order)
+        self.assertEqual(execution_order, ["eda"])
 
     def test_scheduler_executes_segmentation_workflow(self) -> None:
         """Test that scheduler can execute a segmentation workflow end-to-end."""
@@ -74,17 +73,13 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
             
             self.assertIn("feature_engineering", node_outputs)
             self.assertIn("segmentation", node_outputs)
-            self.assertIn("evaluation", node_outputs)
             self.assertIn("recommendation", node_outputs)
-            self.assertIn("visualization", node_outputs)
+            self.assertNotIn("evaluation", node_outputs)
+            self.assertNotIn("visualization", node_outputs)
             
             # Verify segmentation output
             self.assertIn("labels", node_outputs["segmentation"])
             self.assertEqual(len(node_outputs["segmentation"]["labels"]), node_outputs["feature_engineering"]["row_count"])
-            
-            # Verify evaluation output
-            self.assertIn("silhouette_score", node_outputs["evaluation"])
-            self.assertIn("cluster_sizes", node_outputs["evaluation"])
 
     def test_scheduler_executes_descriptive_workflow(self) -> None:
         """Test that scheduler can execute a descriptive workflow end-to-end."""
@@ -98,16 +93,12 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
         
         node_outputs = execute_graph(graph, initial_context)
         
-        self.assertIn("analytics", node_outputs)
-        self.assertIn("eda", node_outputs)
-        
-        # Verify analytics output
-        self.assertIn("row_count", node_outputs["analytics"])
-        self.assertIn("numeric_summary", node_outputs["analytics"])
+        self.assertEqual(list(node_outputs.keys()), ["eda"])
         
         # Verify EDA output
         self.assertIn("numeric_correlations", node_outputs["eda"])
         self.assertIn("sample_rows", node_outputs["eda"])
+        self.assertIn("missing_values", node_outputs["eda"])
 
     def test_response_composer_merges_segmentation_outputs(self) -> None:
         """Test that response composer merges segmentation workflow outputs."""
@@ -136,7 +127,7 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
             self.assertIn("summary", response)
             self.assertIn("statistics", response)
             self.assertIn("recommendations", response)
-            self.assertIn("visualizations", response)
+            self.assertIn("agent_answer", response)
             
             # Verify segmentation summary
             self.assertIn("segmentation", response["summary"])
@@ -146,9 +137,9 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
             self.assertIn("cluster_recommendations", response["recommendations"])
             self.assertIn("customer_recommendations", response["recommendations"])
             
-            # Verify visualizations
-            self.assertIn("scatter", response["visualizations"])
-            self.assertIn("cluster_size_bar", response["visualizations"])
+            # Verify high-impact answer structure
+            self.assertIn("Primary Finding", response["agent_answer"].get("markdown", ""))
+            self.assertIn("Target Customer Table", response["agent_answer"].get("markdown", ""))
 
     def test_response_composer_merges_descriptive_outputs(self) -> None:
         """Test that response composer merges descriptive workflow outputs."""
@@ -172,13 +163,10 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
         self.assertEqual(response["intent"], "descriptive")
         self.assertIn("statistics", response)
         
-        # Verify descriptive statistics
-        self.assertIn("descriptive", response["statistics"])
-        self.assertIn("row_count", response["statistics"]["descriptive"])
-        
-        # Verify exploratory statistics
+        # Verify exploratory statistics from EDA_Tool only
         self.assertIn("exploratory", response["statistics"])
         self.assertIn("numeric_correlations", response["statistics"]["exploratory"])
+        self.assertNotIn("descriptive", response["statistics"])
 
     def test_end_to_end_segmentation_workflow(self) -> None:
         """Test full end-to-end workflow: planner -> execution_graph -> scheduler -> response_composer."""
@@ -213,9 +201,10 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
             self.assertIn("metadata", response)
             
             # Verify metadata
-            self.assertEqual(len(response["metadata"]["nodes_executed"]), 5)
+            self.assertEqual(len(response["metadata"]["nodes_executed"]), 3)
             self.assertIn("feature_engineering", response["metadata"]["nodes_executed"])
             self.assertIn("segmentation", response["metadata"]["nodes_executed"])
+            self.assertIn("recommendation", response["metadata"]["nodes_executed"])
 
     def test_end_to_end_descriptive_workflow(self) -> None:
         """Test full end-to-end workflow for descriptive query."""
@@ -239,8 +228,8 @@ class ExecutionEngineSmokeTests(unittest.TestCase):
         self.assertEqual(response["workflow_name"], "descriptive_workflow")
         self.assertEqual(response["intent"], "descriptive")
         self.assertIn("statistics", response)
-        self.assertIn("descriptive", response["statistics"])
         self.assertIn("exploratory", response["statistics"])
+        self.assertEqual(response["metadata"]["nodes_executed"], ["eda"])
 
 
 if __name__ == "__main__":

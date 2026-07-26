@@ -6,7 +6,7 @@ from typing import Any
 import asyncio
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from backend.app.decision_memory.decision_memory import _DEFAULT_DB_PATH
+from backend.app.decision_memory.decision_memory import _DEFAULT_DB_PATH, list_recent
 from backend.app.dashboard import event_bus
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -69,6 +69,28 @@ def get_node_stats() -> dict[str, Any]:
         del data["_total_duration"]
         
     return stats
+    
+@router.get("/queries")
+def get_queries() -> list[dict[str, Any]]:
+    """Return the most recent queries from decision memory."""
+    recent = list_recent(limit=50)
+    result = []
+    for row in recent:
+        explanation_summary = json.loads(row.get("explanation_summary") or "{}")
+        response_json = json.loads(row.get("response_json") or "{}")
+        
+        cache_hit = response_json.get("cache_hit", False)
+        explainer_used = explanation_summary.get("explainer_used", False)
+        
+        result.append({
+            "id": str(row["id"]),
+            "query_text": row["query_text"],
+            "chosen_algorithm": row["chosen_algorithm"],
+            "cache_hit": cache_hit,
+            "explainer_used": explainer_used,
+            "created_at": row["created_at"]
+        })
+    return result
 
 @router.get("/queries/{query_id}/graph")
 def get_query_graph(query_id: int) -> list[dict[str, Any]]:

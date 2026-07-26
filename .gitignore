@@ -8,7 +8,7 @@ __pycache__/
 
 # Raw Data Files
 *.csv
-**/Ai files/
+**/Ai_files/
 **/Backup/
 
 # Distribution / packaging

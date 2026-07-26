@@ -37,9 +37,9 @@ class Phase8PlannerReasoningTests(unittest.TestCase):
         would not have generated, proving the reasoning is real.
 
         We test this by showing that a partial-intent query (one that the rule
-        fallback would always map to the full 5-step segmentation template)
+        fallback would always map to the lean segmentation tool chain)
         is capable of producing a different sequence when the planner reasons
-        about whether recommendation or visualization nodes are needed.
+        about whether optional nodes are needed.
         """
         # The rule-based fallback always produces the same fixed templates
         context_seg = build_context("segment customers into 3 clusters")
@@ -47,8 +47,8 @@ class Phase8PlannerReasoningTests(unittest.TestCase):
         rule_nodes = [step.node for step in rule_steps]
         self.assertEqual(
             rule_nodes,
-            ["feature_engineering", "segmentation", "evaluation", "recommendation", "visualization"],
-            "Rule-based fallback must always return the full segmentation template",
+            ["feature_engineering", "segmentation", "recommendation"],
+            "Rule-based fallback must return Feature_Engineering -> Segmentation -> Recommendation",
         )
 
         # The LLM plan structure supports arbitrary subsets of these nodes

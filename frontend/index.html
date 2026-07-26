@@ -111,8 +111,92 @@
     .data-number { font-family: var(--font-data); }
     .scatter-wrap { display: grid; gap: 6px; }
     .dot-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); font-family: var(--font-data); }
+    .nav-links { display: flex; gap: 12px; margin-top: 14px; }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--base);
+      border-radius: 10px;
+      box-shadow: 3px 3px 6px var(--dark-shadow), -3px -3px 6px var(--light-shadow);
+      padding: 8px 16px;
+      color: var(--accent);
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .nav-link:hover {
+      box-shadow: inset 2px 2px 5px var(--dark-shadow), inset -2px -2px 5px var(--light-shadow);
+    }
+    .node-chip-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .node-chip {
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-family: var(--font-data);
+      font-size: 0.82rem;
+      color: var(--accent);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+    }
 
-  
+    .chain-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .chain-arrow { color: var(--muted); font-family: var(--font-data); }
+
+    .markdown-body {
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .markdown-body > *:first-child { margin-top: 0; }
+    .markdown-body > *:last-child { margin-bottom: 0; }
+    .markdown-body h1,
+    .markdown-body h2,
+    .markdown-body h3 {
+      margin: 1.25em 0 0.55em;
+      color: var(--accent);
+      font-family: var(--font-display);
+    }
+    .markdown-body h2 { font-size: 1.2rem; }
+    .markdown-body h3 { font-size: 1.05rem; }
+    .markdown-body p { margin: 0.65em 0; color: var(--ink); }
+    .markdown-body ul,
+    .markdown-body ol {
+      margin: 0.55em 0 0.85em;
+      padding-left: 1.35rem;
+      color: var(--ink);
+    }
+    .markdown-body li { margin: 0.3em 0; }
+    .markdown-body code {
+      font-family: var(--font-data);
+      font-size: 0.88em;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      padding: 0.1em 0.35em;
+    }
+    .markdown-body table {
+      margin: 0.85em 0 1.1em;
+      background: rgba(255, 255, 255, 0.45);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .markdown-body th {
+      background: rgba(10, 92, 85, 0.08);
+    }
+    .markdown-body td {
+      font-family: var(--font-data);
+      font-size: 0.86rem;
+    }
+    .markdown-body strong { color: var(--ink); }
+
     @media (prefers-reduced-motion: reduce) {
       .glass-token.running { animation: none; }
       .node-inprogress { animation: none; }
@@ -123,14 +207,24 @@
 <body>
   <main class="shell">
     <section class="hero neu-surface">
-      <p class="notice">Canonical path: POST /query through Planner + Scheduler. Legacy bypass: POST /run-workflow (ISSUE-002 fallback).</p>
-      <h1>ASTER — Retail Banking Segmentation Agent</h1>
-      <p>Ask a natural-language question about customer behaviour. ASTER plans and executes the analytical workflow, then returns segments, recommendations, and rule-based explanations.</p>
+      <h1>ASTER — Agentic Banking Analytics</h1>
+      <p>Ask a natural-language question about customer behaviour. ASTER reasons through a Planner → Execution Graph → Scheduler pipeline, with LLM-assisted planning and deterministic fallback, then returns segments, recommendations, and explanations.</p>
+      <div class="nav-links">
+        <a href="/dashboard-ui" class="nav-link" id="dashboard-link">📊 Agent Metrics Dashboard</a>
+      </div>
       <div class="query-row">
-        <input id="query-input" type="text" class="neu-inset" value="segment customers into 3 clusters" placeholder="e.g. segment customers into 3 clusters" />
+        <input id="query-input" type="text" class="neu-inset" placeholder="e.g. segment customers into 3 clusters" />
         <button id="run-button" class="neu-button">Run Query</button>
       </div>
       <p id="status-line" class="notice" style="margin-top:10px;">Ready.</p>
+      <div id="clarification-panel" class="glass-panel" style="display: none; margin-top: 16px;">
+        <h2>Clarification Needed</h2>
+        <p id="clarification-question" class="notice"></p>
+        <div class="query-row" style="margin-top: 12px; grid-template-columns: 1fr auto;">
+          <input id="clarification-input" type="text" class="neu-inset" placeholder="Type your clarification..." />
+          <button id="clarification-submit" class="neu-button">Submit</button>
+        </div>
+      </div>
       <div id="unsupported-filters-notice" class="notice" style="display: none; color: #b73a3a; margin-top: 10px; font-weight: bold; padding: 10px; background: rgba(183, 58, 58, 0.1); border-radius: 8px;"></div>
     </section>
 
@@ -139,49 +233,55 @@
       <div class="chain-container" id="execution-chain"></div>
     </section>
 
-    <section class="grid">
-      <div class="glass-panel">
+    <section class="glass-panel" id="agent-answer-panel" style="display: none;">
+      <h2>Agent Answer</h2>
+      <div id="agent-answer" class="markdown-body"></div>
+    </section>
+
+    <section class="grid" id="workflow-eval-grid" style="display: none;">
+      <div class="glass-panel" id="workflow-panel">
         <h2>Workflow</h2>
-        <div id="workflow-meta" class="notice">No query run yet.</div>
+        <div id="workflow-meta"></div>
       </div>
-      <div class="glass-panel">
+      <div class="glass-panel" id="evaluation-panel">
         <h2>Evaluation</h2>
-        <div class="metric" id="silhouette-score">--</div>
+        <div class="metric" id="silhouette-score"></div>
         <p class="notice">Silhouette score (segmentation queries only).</p>
       </div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="segment-summaries-panel" style="display: none;">
       <h2>Segment Personas</h2>
-      <div id="segment-summaries" class="notice">No segment summaries yet.</div>
+      <div id="segment-summaries"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="recommendations-panel" style="display: none;">
       <h2>Cluster Recommendations</h2>
-      <div id="recommendations" class="notice">No recommendations yet.</div>
+      <div id="recommendations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="explanations-panel" style="display: none;">
       <h2>Customer Explanations</h2>
-      <div id="explanations" class="notice">No explanations yet.</div>
+      <div id="explanations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="cluster-table-panel" style="display: none;">
       <h2>Cluster Table</h2>
-      <div id="cluster-table" class="notice">No cluster table yet.</div>
+      <div id="cluster-table"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="visualizations-panel" style="display: none;">
       <h2>Charts / Tables</h2>
-      <div id="visualizations" class="notice">No visualization payload yet.</div>
+      <div id="visualizations"></div>
     </section>
 
-    <section class="glass-panel">
+    <section class="glass-panel" id="statistics-panel" style="display: none;">
       <h2>Statistics</h2>
-      <pre id="statistics">No statistics yet.</pre>
+      <pre id="statistics"></pre>
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script>
     const queryInput = document.getElementById('query-input');
     const runButton = document.getElementById('run-button');
@@ -194,7 +294,173 @@
     const clusterTable = document.getElementById('cluster-table');
     const visualizations = document.getElementById('visualizations');
     const statistics = document.getElementById('statistics');
+    const agentAnswer = document.getElementById('agent-answer');
     const unsupportedFiltersNotice = document.getElementById('unsupported-filters-notice');
+    const clarificationPanel = document.getElementById('clarification-panel');
+    const clarificationQuestion = document.getElementById('clarification-question');
+    const clarificationInput = document.getElementById('clarification-input');
+    const clarificationSubmit = document.getElementById('clarification-submit');
+
+    let pendingOriginalQuery = null;
+
+    if (window.marked) {
+      marked.setOptions({
+        gfm: true,
+        breaks: true,
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderMarkdown(markdown) {
+      const source = (markdown || '').trim();
+      if (!source) {
+        return '<div class="notice">No formatted answer available.</div>';
+      }
+      if (window.marked && typeof marked.parse === 'function') {
+        return marked.parse(source);
+      }
+      return `<pre>${escapeHtml(source)}</pre>`;
+    }
+
+    function renderAgentAnswer(payload) {
+      const markdown = payload.answer_markdown || payload.agent_answer?.markdown || '';
+      agentAnswer.classList.remove('notice');
+      agentAnswer.classList.add('markdown-body');
+      if (!markdown) {
+        agentAnswer.classList.add('notice');
+        agentAnswer.innerHTML = 'No formatted answer available.';
+        return;
+      }
+      agentAnswer.innerHTML = renderMarkdown(markdown);
+    }
+
+    function hideClarificationPanel() {
+      clarificationPanel.style.display = 'none';
+      pendingOriginalQuery = null;
+      clarificationInput.value = '';
+    }
+
+    function showClarificationPanel(payload) {
+      hideAllResultPanels();
+      pendingOriginalQuery = payload.original_query || queryInput.value.trim();
+      clarificationQuestion.textContent = payload.question || 'Please provide more detail.';
+      clarificationInput.value = '';
+      clarificationPanel.style.display = 'block';
+      unsupportedFiltersNotice.style.display = 'none';
+    }
+
+    function renderNodeChips(nodes) {
+      if (!nodes || !nodes.length) {
+        return '<div class="notice">No nodes executed.</div>';
+      }
+      return `<div class="node-chip-list">${nodes.map((node) => `<span class="node-chip">${node}</span>`).join('')}</div>`;
+    }
+
+    // --- Generic panel visibility system ---
+    // Each entry: panelId (the section wrapper), a check function (returns true if data exists),
+    // and a render function (populates the content element inside the panel).
+    const PANEL_CONFIG = [
+      {
+        panelId: 'agent-answer-panel',
+        hasData: (p) => !!(p.answer_markdown || p.agent_answer?.markdown),
+        render: (p) => renderAgentAnswer(p),
+      },
+      {
+        panelId: 'workflow-eval-grid',
+        hasData: (p) => !!(p.workflow_name || p.metadata?.nodes_executed?.length),
+        render: (p) => {
+          const nodesExecuted = p.metadata?.nodes_executed || [];
+          const toolsInvoked = p.metadata?.tools_invoked || p.agent_answer?.tools_invoked || [];
+          workflowMeta.innerHTML = `
+            <div><strong>Workflow:</strong> ${p.workflow_name || 'N/A'}</div>
+            <div><strong>Intent:</strong> ${p.intent || 'N/A'}</div>
+            <div><strong>Planning path:</strong> ${p.metadata?.planning_path || 'N/A'}</div>
+            <div><strong>Tools invoked:</strong> ${(toolsInvoked.length ? toolsInvoked.join(', ') : 'none')}</div>
+            <div><strong>Nodes executed:</strong></div>
+            ${renderNodeChips(nodesExecuted)}
+          `;
+          const score = p.summary?.evaluation?.silhouette_score;
+          if (score != null) {
+            silhouetteScore.textContent = score;
+            document.getElementById('evaluation-panel').style.display = '';
+          } else {
+            document.getElementById('evaluation-panel').style.display = 'none';
+          }
+        },
+      },
+      {
+        panelId: 'segment-summaries-panel',
+        hasData: (p) => !!(p.explanations?.segment_summaries?.length),
+        render: (p) => { segmentSummaries.innerHTML = renderTable(p.explanations.segment_summaries); },
+      },
+      {
+        panelId: 'recommendations-panel',
+        hasData: (p) => !!(p.recommendations?.cluster_recommendations?.length),
+        render: (p) => { recommendations.innerHTML = renderTable(p.recommendations.cluster_recommendations); },
+      },
+      {
+        panelId: 'explanations-panel',
+        hasData: (p) => !!(p.explanations?.customer_explanations?.length),
+        render: (p) => { explanations.innerHTML = renderTable((p.explanations.customer_explanations).slice(0, 20)); },
+      },
+      {
+        panelId: 'cluster-table-panel',
+        hasData: (p) => {
+          const targets = p.agent_answer?.target_customers;
+          if (targets && targets.length) return true;
+          return buildClusterTable(p).length > 0;
+        },
+        render: (p) => {
+          const targets = p.agent_answer?.target_customers;
+          clusterTable.innerHTML = renderTable(
+            (targets && targets.length) ? targets : buildClusterTable(p)
+          );
+        },
+      },
+      {
+        panelId: 'visualizations-panel',
+        hasData: (p) => !!(p.visualizations?.scatter || p.visualizations?.cluster_size_bar),
+        render: (p) => { visualizations.innerHTML = renderVisualizations(p.visualizations || {}); },
+      },
+      {
+        panelId: 'statistics-panel',
+        hasData: (p) => !!(p.statistics && Object.keys(p.statistics).length),
+        render: (p) => { statistics.textContent = JSON.stringify(p.statistics, null, 2); },
+      },
+    ];
+
+    function hideAllResultPanels() {
+      PANEL_CONFIG.forEach(({ panelId }) => {
+        document.getElementById(panelId).style.display = 'none';
+      });
+      unsupportedFiltersNotice.style.display = 'none';
+    }
+
+    function renderQueryResults(payload) {
+      hideClarificationPanel();
+      hideAllResultPanels();
+
+      if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
+        const names = payload.unsupported_filters.map(f => f.requested).join(', ');
+        unsupportedFiltersNotice.style.display = 'block';
+        unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
+      }
+
+      PANEL_CONFIG.forEach(({ panelId, hasData, render }) => {
+        if (hasData(payload)) {
+          document.getElementById(panelId).style.display = '';
+          render(payload);
+        }
+      });
+    }
 
     function renderTable(rows) {
       if (!rows || !rows.length) return '<div class="notice">No rows.</div>';
@@ -302,50 +568,50 @@
     }
     initWebSocket();
 
-    async function runQuery() {
-      const query = queryInput.value.trim();
-      if (!query) return;
+    async function runQuery(options = {}) {
+      const query = options.query ?? queryInput.value.trim();
+      const clarificationResponse = options.clarificationResponse ?? null;
+      if (!query) {
+        statusLine.textContent = 'Please enter a query before running.';
+        statusLine.style.color = '#b73a3a';
+        queryInput.focus();
+        return;
+      }
+      statusLine.style.color = '';
 
-      
       runButton.disabled = true;
-      statusLine.textContent = 'Running POST /query ...';
-      
+      statusLine.textContent = clarificationResponse
+        ? 'Resubmitting with clarification...'
+        : 'Running POST /query ...';
+
       activeQueryId = null;
       nodesState = [];
       liveChainPanel.style.display = 'none';
       executionChain.innerHTML = '';
-
+      hideAllResultPanels();
+      hideClarificationPanel();
 
       try {
+        const requestBody = { query };
+        if (clarificationResponse) {
+          requestBody.clarification_response = clarificationResponse;
+        }
+
         const response = await fetch('/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify(requestBody),
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || 'Query failed');
 
-        if (payload.unsupported_filters && payload.unsupported_filters.length > 0) {
-          const names = payload.unsupported_filters.map(f => f.requested).join(', ');
-          unsupportedFiltersNotice.style.display = 'block';
-          unsupportedFiltersNotice.textContent = `Note: this dataset doesn't include: ${names} — these filters were not applied. Results below reflect all other criteria only.`;
-        } else {
-          unsupportedFiltersNotice.style.display = 'none';
+        if (payload.status === 'clarification_needed') {
+          showClarificationPanel(payload);
+          statusLine.textContent = 'Clarification needed.';
+          return;
         }
 
-        workflowMeta.innerHTML = `
-          <div><strong>Workflow:</strong> ${payload.workflow_name}</div>
-          <div><strong>Intent:</strong> ${payload.intent}</div>
-          <div><strong>Nodes:</strong> ${(payload.metadata?.nodes_executed || []).join(', ')}</div>
-        `;
-
-        silhouetteScore.textContent = payload.summary?.evaluation?.silhouette_score ?? 'N/A (descriptive or lookup query)';
-        segmentSummaries.innerHTML = renderTable(payload.explanations?.segment_summaries || []);
-        recommendations.innerHTML = renderTable(payload.recommendations?.cluster_recommendations || []);
-        explanations.innerHTML = renderTable((payload.explanations?.customer_explanations || []).slice(0, 20));
-        clusterTable.innerHTML = payload.results ? renderTable(payload.results) : renderTable(buildClusterTable(payload));
-        visualizations.innerHTML = renderVisualizations(payload.visualizations || {});
-        statistics.textContent = JSON.stringify(payload.statistics || {}, null, 2);
+        renderQueryResults(payload);
         statusLine.textContent = 'Done.';
       } catch (error) {
         statusLine.textContent = `Error: ${error.message}`;
@@ -354,7 +620,20 @@
       }
     }
 
-    runButton.addEventListener('click', runQuery);
+    async function submitClarification() {
+      const clarificationResponse = clarificationInput.value.trim();
+      if (!pendingOriginalQuery || !clarificationResponse) return;
+      await runQuery({
+        query: pendingOriginalQuery,
+        clarificationResponse,
+      });
+    }
+
+    runButton.addEventListener('click', () => runQuery());
+    clarificationSubmit.addEventListener('click', submitClarification);
+    clarificationInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submitClarification();
+    });
     queryInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') runQuery();
     });

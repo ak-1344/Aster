@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.app.planner.planner import format_high_impact_answer
+
 
 def compose_response(
     workflow_name: str,
@@ -14,7 +16,10 @@ def compose_response(
     execution_log: list[dict[str, Any]] | None = None,
     planning_path: str | None = None,
     planner_reasoning: str | None = None,
+    routing_reason: str | None = None,
     unsupported_filters: list[dict[str, str]] | None = None,
+    query_context: dict[str, Any] | None = None,
+    planner_output: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge collected node outputs into a single structured response object.
 
@@ -38,13 +43,17 @@ def compose_response(
         "recommendations": {},
         "visualizations": {},
         "explanations": explanations or {"customer_explanations": [], "segment_summaries": []},
+        "agent_answer": {},
         "metadata": {
             "nodes_executed": list(node_outputs.keys()),
             "node_count": len(node_outputs),
             "planning_path": planning_path,
             "planner_reasoning": planner_reasoning,
+            "routing_reason": routing_reason,
             "execution_log": list(execution_log or []),
             "llm_assistance": {},
+            "tools_invoked": list((planner_output or {}).get("tools_invoked") or []),
+            "operational_assumption": (planner_output or {}).get("operational_assumption"),
         },
     }
 
@@ -139,5 +148,29 @@ def compose_response(
                     "reason": llm_assistance.get("reason", ""),
                 }
             )
+
+    plan_for_answer = dict(planner_output or {})
+    plan_for_answer.setdefault("intent", intent)
+    plan_for_answer.setdefault("workflow_name", workflow_name)
+    plan_for_answer.setdefault("planning_path", planning_path)
+    plan_for_answer.setdefault("intent_classification", intent_classification)
+
+    try:
+        response["agent_answer"] = format_high_impact_answer(
+            context=query_context or {"intent": intent},
+            planner_output=plan_for_answer,
+            node_outputs=node_outputs,
+            explanations=response["explanations"],
+        )
+        response["answer_markdown"] = response["agent_answer"].get("markdown", "")
+        if response["agent_answer"].get("tools_invoked"):
+            response["metadata"]["tools_invoked"] = response["agent_answer"]["tools_invoked"]
+        if response["agent_answer"].get("operational_assumption"):
+            response["metadata"]["operational_assumption"] = response["agent_answer"][
+                "operational_assumption"
+            ]
+    except Exception:
+        response["agent_answer"] = {}
+        response["answer_markdown"] = ""
 
     return response

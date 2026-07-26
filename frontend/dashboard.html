@@ -152,6 +152,15 @@
       .node-inprogress { animation: none; }
     }
     a:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; border-radius: 4px; }
+    .nav-links { display: flex; gap: 12px; margin-top: 14px; }
+    .nav-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--base); border-radius: 10px;
+      box-shadow: 3px 3px 6px var(--dark-shadow), -3px -3px 6px var(--light-shadow);
+      padding: 8px 16px; color: var(--accent); font-family: var(--font-display);
+      font-weight: 600; font-size: 0.85rem; text-decoration: none; transition: all 0.2s ease;
+    }
+    .nav-link:hover { box-shadow: inset 2px 2px 5px var(--dark-shadow), inset -2px -2px 5px var(--light-shadow); }
     </style>
 </head>
 <body>
@@ -159,6 +168,9 @@
     <section class="hero neu-surface">
       <h1>ASTER — Metrics Dashboard</h1>
       <p>Live node performance and query execution monitoring.</p>
+      <div class="nav-links">
+        <a href="/" class="nav-link" id="back-to-query-link">← Back to Query Interface</a>
+      </div>
       <div style="margin-top: 10px; font-size: 0.85rem;">
         <span id="ws-status" class="status-indicator status-disconnected"></span>
         <span id="ws-status-text">Live updates disconnected</span>
@@ -210,6 +222,28 @@
           ${rows || '<tr><td colspan="4">No queries yet</td></tr>'}
         </table>
       `;
+    }
+
+    async function fetchRecentQueries() {
+      try {
+        const res = await fetch('/dashboard/queries');
+        const data = await res.json();
+        
+        data.forEach(row => {
+          if (!recentQueries[row.id]) {
+            recentQueries[row.id] = {
+              id: String(row.id),
+              timestamp: new Date(row.created_at).getTime(),
+              timestamp_str: new Date(row.created_at).toLocaleTimeString(),
+              workflow_name: row.query_text || row.chosen_algorithm || 'historical',
+              status: row.cache_hit ? 'cache hit' : 'success'
+            };
+          }
+        });
+        renderQueriesTable();
+      } catch (err) {
+        document.getElementById('recent-queries-table').innerHTML = `<div class="notice">Failed to load queries: ${err.message}</div>`;
+      }
     }
 
     async function fetchNodeStats() {
@@ -423,7 +457,7 @@
     }
 
     // Initial load
-    renderQueriesTable();
+    fetchRecentQueries();
     fetchNodeStats();
     initWebSocket();
   </script>

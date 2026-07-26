@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 from backend.app.llm.gemini_client import (
     GeminiRequestError,
@@ -12,9 +17,33 @@ from backend.app.llm.gemini_client import (
     GeminiUnavailableError,
     request_structured_output,
 )
+from backend.utils.loader import DEFAULT_DATASET_PATH
 
 
-VALID_PLAN_INTENTS = {"full_workflow", "explanation_only", "eda_only", "lookup_only"}
+VALID_PLAN_INTENTS = {"full_workflow", "explanation_only", "eda_only"}
+
+# Logical tool names used in query-aware execution summaries.
+TOOL_EDA = "EDA_Tool"
+TOOL_FEATURE_ENGINEERING = "Feature_Engineering"
+TOOL_SEGMENTATION = "Segmentation_Engine"
+TOOL_RECOMMENDATION = "Recommendation_Engine"
+TOOL_CUSTOMER_LOOKUP = "Single_Customer_Lookup"
+TOOL_SEGMENT_EXPLAINER = "Segment_Rule_Explainer"
+
+# Subjective language that requires an explicit operational definition.
+SUBJECTIVE_TERMS = {
+    "best",
+    "profitable",
+    "top customers",
+    "top customer",
+    "best customers",
+    "best customer",
+    "most valuable",
+    "high value",
+    "high-value",
+}
+
+_CUST_ID_PATTERN = re.compile(r"\bC\d{4,}\b", re.IGNORECASE)
 
 
 class InvalidLLMPlan(ValueError):
@@ -48,19 +77,22 @@ NODE_CATALOG: dict[str, dict[str, Any]] = {
         "outputs": ["numeric_summary", "categorical_summary"],
     },
     "eda": {
-        "purpose": "Provide exploratory summaries and correlations",
+        "purpose": "Provide exploratory summaries, distributions, and null checks",
         "inputs": ["backend/data/raw/CC GENERAL.csv"],
         "outputs": ["missing_values", "numeric_correlations", "sample_rows"],
+        "tool": TOOL_EDA,
     },
     "feature_engineering": {
         "purpose": "Load and prepare customer-level features",
         "inputs": ["backend/data/raw/CC GENERAL.csv"],
         "outputs": ["backend/data/processed/customer_features.csv"],
+        "tool": TOOL_FEATURE_ENGINEERING,
     },
     "segmentation": {
         "purpose": "Cluster customers into behavioural groups",
         "inputs": ["customer_features.csv"],
         "outputs": ["cluster_labels", "cluster_centers"],
+        "tool": TOOL_SEGMENTATION,
     },
     "evaluation": {
         "purpose": "Score the clustering quality",
@@ -71,16 +103,12 @@ NODE_CATALOG: dict[str, dict[str, Any]] = {
         "purpose": "Attach tier-based retention and cross-sell guidance",
         "inputs": ["cluster_labels", "customer_features.csv"],
         "outputs": ["cluster_recommendations", "customer_recommendations"],
+        "tool": TOOL_RECOMMENDATION,
     },
     "visualization": {
         "purpose": "Prepare cluster charts for display",
         "inputs": ["cluster_labels", "customer_features.csv"],
         "outputs": ["scatter", "cluster_size_bar"],
-    },
-    "lookup": {
-        "purpose": "Filter and sort the dataset based on requested fields and limits",
-        "inputs": ["query_context", "backend/data/raw/CC GENERAL.csv"],
-        "outputs": ["results", "unsupported_output_fields"],
     },
 }
 
@@ -92,7 +120,6 @@ NODE_PREREQUISITES: dict[str, set[str]] = {
     "evaluation": {"feature_engineering", "segmentation"},
     "recommendation": {"feature_engineering", "segmentation"},
     "visualization": {"feature_engineering", "segmentation"},
-    "lookup": set(),
 }
 
 
@@ -104,11 +131,7 @@ def classify_intent(query_context: dict[str, Any]) -> str:
         or query_context.get("raw_query")
         or query_context.get("query", "")
     ).lower()
-
-    requested_fields = query_context.get("requested_fields")
-    top_n = query_context.get("top_n")
-
-    explanation_keywords = [
+    explanation_keywords = {
         "explain",
         "why",
         "how",
@@ -116,8 +139,8 @@ def classify_intent(query_context: dict[str, Any]) -> str:
         "interpret",
         "understand",
         "clarify",
-    ]
-    eda_keywords = [
+    }
+    eda_keywords = {
         "explore",
         "analyze",
         "summary",
@@ -125,17 +148,11 @@ def classify_intent(query_context: dict[str, Any]) -> str:
         "describe",
         "overview",
         "profile",
-    ]
-    segmentation_keywords = ["segment", "cluster", "group", "persona"]
-    recommendation_keywords = ["recommend", "offer", "action"]
+    }
 
-    has_explanation = any(keyword in query_text for keyword in explanation_keywords)
-    has_eda = any(keyword in query_text for keyword in eda_keywords)
-    has_segmentation = any(keyword in query_text for keyword in segmentation_keywords)
-    has_recommendation = any(keyword in query_text for keyword in recommendation_keywords)
-
-    if (requested_fields or top_n) and not (has_segmentation or has_explanation or has_recommendation):
-        return "lookup_only"
+    tokens = set(query_text.split())
+    has_explanation = bool(tokens & explanation_keywords)
+    has_eda = bool(tokens & eda_keywords)
 
     if has_explanation and not has_eda:
         return "explanation_only"
@@ -159,23 +176,73 @@ def _build_steps_from_sequence(node_sequence: list[str]) -> list[PlanStep]:
 
 
 def _build_segmentation_steps() -> list[PlanStep]:
-    """Build the original segmentation template for rule-based fallback only."""
+    """Feature_Engineering -> Segmentation_Engine -> Recommendation_Engine."""
 
     return _build_steps_from_sequence(
-        [
-            "feature_engineering",
-            "segmentation",
-            "evaluation",
-            "recommendation",
-            "visualization",
-        ]
+        ["feature_engineering", "segmentation", "recommendation"]
     )
 
 
 def _build_descriptive_steps() -> list[PlanStep]:
-    """Build the original descriptive template for rule-based fallback only."""
+    """Run ONLY EDA_Tool for descriptive intent."""
 
-    return _build_steps_from_sequence(["analytics", "eda"])
+    return _build_steps_from_sequence(["eda"])
+
+
+def extract_customer_id(query_text: str) -> str | None:
+    """Extract a CUST_ID token (e.g. C10001) from free text when present."""
+
+    match = _CUST_ID_PATTERN.search(query_text or "")
+    return match.group(0).upper() if match else None
+
+
+def select_explanation_tool(query_text: str) -> str:
+    """Choose Single_Customer_Lookup vs Segment_Rule_Explainer for explanation intent."""
+
+    if extract_customer_id(query_text):
+        return TOOL_CUSTOMER_LOOKUP
+    return TOOL_SEGMENT_EXPLAINER
+
+
+def detect_subjective_assumption(query_text: str) -> str | None:
+    """Return an operational definition when subjective language lacks thresholds."""
+
+    normalized = (query_text or "").lower()
+    if re.search(r"\d", normalized):
+        return None
+
+    hit = next((term for term in SUBJECTIVE_TERMS if term in normalized), None)
+    if hit is None:
+        return None
+
+    return (
+        f"Assumed '{hit}' refers to 'The Transactors' segment with high purchase "
+        "volume and strong repayment behaviour (high full-payment tendency / low "
+        "revolving risk), used as the operational definition of best customers."
+    )
+
+
+def resolve_tools_for_intent(
+    analytical_intent: str,
+    query_text: str,
+    node_sequence: list[str] | None = None,
+) -> list[str]:
+    """Map analytical intent (and optional nodes) to logical tool names."""
+
+    if analytical_intent == "descriptive":
+        return [TOOL_EDA]
+    if analytical_intent == "segmentation":
+        if node_sequence:
+            tools = [
+                NODE_CATALOG[node]["tool"]
+                for node in node_sequence
+                if node in NODE_CATALOG and NODE_CATALOG[node].get("tool")
+            ]
+            return tools or [TOOL_FEATURE_ENGINEERING, TOOL_SEGMENTATION, TOOL_RECOMMENDATION]
+        return [TOOL_FEATURE_ENGINEERING, TOOL_SEGMENTATION, TOOL_RECOMMENDATION]
+    if analytical_intent == "explanation":
+        return [select_explanation_tool(query_text)]
+    return [TOOL_EDA]
 
 
 def _plan_schema() -> dict[str, Any]:
@@ -209,6 +276,7 @@ def _planner_prompt(context: dict[str, Any], retry_feedback: str = "") -> str:
         node_name: {
             "purpose": definition["purpose"],
             "must_follow": sorted(NODE_PREREQUISITES[node_name]),
+            "tool": definition.get("tool"),
         }
         for node_name, definition in NODE_CATALOG.items()
     }
@@ -226,15 +294,13 @@ def _planner_prompt(context: dict[str, Any], retry_feedback: str = "") -> str:
             "Choose the smallest safe ordered node sequence that answers the request.",
             "Return only a JSON object matching the supplied schema.",
             "Do not invent node names, algorithms, data, recommendations, or computations.",
+            "Intent orchestration rules:",
+            "- descriptive / eda_only: schedule ONLY the eda node (EDA_Tool).",
+            "- segmentation / full_workflow marketing queries: feature_engineering -> segmentation -> recommendation.",
+            "- explanation_only: empty node_sequence; Single_Customer_Lookup or Segment_Rule_Explainer runs in answer formatting.",
             "The recommendation node is only needed when the user asks for actions, offers, or recommendations.",
             "The visualization node currently renders customer clusters, so it requires feature_engineering and segmentation first.",
             "Use explanation_only with an empty node_sequence only when no new analytical execution is needed.",
-            "Use lookup_only with the lookup node when the user asks for specific fields, rows, or top N limits without requesting segmentation, explanation, or recommendation.",
-            "Select only the nodes strictly required to answer the query. Do not include explanation, recommendation, or visualization nodes unless the query explicitly asks for them, even if you believe they would be helpful.",
-            "Examples:",
-            'Query: "top 10 customers by balance, just customer ID and balance" -> {"intent": "lookup_only", "node_sequence": ["lookup"], "reasoning": "User requested a direct lookup of specific fields and rows without analytical modelling."}',
-            'Query: "segment my customers into 4 groups" -> {"intent": "full_workflow", "node_sequence": ["feature_engineering", "segmentation"], "reasoning": "User requested clustering."}',
-            'Query: "show me average spending stats" -> {"intent": "eda_only", "node_sequence": ["analytics", "eda"], "reasoning": "User requested descriptive statistics."}',
             f"Query context: {json.dumps(context_for_prompt, sort_keys=True)}",
             f"Node catalog: {json.dumps(catalog, sort_keys=True)}",
             retry_feedback,
@@ -261,12 +327,8 @@ def _validate_node_sequence(intent: str, node_sequence: list[Any]) -> list[str]:
 
     if intent == "explanation_only" and node_sequence:
         raise InvalidLLMPlan("explanation_only plans must not schedule analytical nodes")
-    if intent == "lookup_only" and node_sequence != ["lookup"]:
-        raise InvalidLLMPlan("lookup_only plans must schedule exactly the lookup node")
-    if intent == "eda_only" and (
-        not node_sequence or any(node not in {"analytics", "eda"} for node in node_sequence)
-    ):
-        raise InvalidLLMPlan("eda_only plans may contain only analytics and eda nodes")
+    if intent == "eda_only" and (node_sequence != ["eda"]):
+        raise InvalidLLMPlan("eda_only plans must schedule only the eda node")
     if intent == "full_workflow" and not node_sequence:
         raise InvalidLLMPlan("full_workflow plans require at least one node")
 
@@ -325,20 +387,18 @@ def _request_llm_plan(context: dict[str, Any]) -> tuple[dict[str, Any] | None, s
 
 
 def _build_rule_based_fallback(context: dict[str, Any]) -> tuple[str, list[PlanStep]]:
-    """Build a safe plan using the preserved rule-based classifier and templates."""
+    """Build a safe plan using intent-driven tool orchestration templates."""
 
     intent_classification = classify_intent(context)
-    analytical_intent = context.get("intent", "descriptive")
+    analytical_intent = str(context.get("intent", "descriptive"))
 
-    if intent_classification == "explanation_only":
-        return intent_classification, []
-    if intent_classification == "lookup_only":
-        return intent_classification, _build_steps_from_sequence(["lookup"])
-    if intent_classification == "eda_only":
-        return intent_classification, _build_descriptive_steps()
+    if analytical_intent == "explanation" or intent_classification == "explanation_only":
+        return "explanation_only", []
+    if analytical_intent == "descriptive" or intent_classification == "eda_only":
+        return "eda_only", _build_descriptive_steps()
     if analytical_intent == "segmentation":
-        return intent_classification, _build_segmentation_steps()
-    return intent_classification, _build_descriptive_steps()
+        return "full_workflow", _build_segmentation_steps()
+    return "eda_only", _build_descriptive_steps()
 
 
 def _effective_analytical_intent(context: dict[str, Any], steps: list[PlanStep]) -> str:
@@ -346,12 +406,24 @@ def _effective_analytical_intent(context: dict[str, Any], steps: list[PlanStep])
 
     if any(step.node == "segmentation" for step in steps):
         return "segmentation"
-    return str(context.get("intent", "descriptive"))
+    if any(step.node == "eda" for step in steps) and not any(
+        step.node in {"feature_engineering", "segmentation", "recommendation"} for step in steps
+    ):
+        return "descriptive"
+    context_intent = str(context.get("intent", "descriptive"))
+    if context_intent == "explanation" and not steps:
+        return "explanation"
+    return context_intent
 
 
 def build_execution_plan(context: dict[str, Any]) -> dict[str, Any]:
     """Build an executable plan with Gemini reasoning and a deterministic fallback."""
 
+    query_text = str(
+        context.get("normalized_query")
+        or context.get("raw_query")
+        or context.get("query", "")
+    )
     llm_plan, fallback_reason, attempts = _request_llm_plan(context)
     if llm_plan is not None:
         steps = _build_steps_from_sequence(llm_plan["node_sequence"])
@@ -364,6 +436,10 @@ def build_execution_plan(context: dict[str, Any]) -> dict[str, Any]:
         planner_reasoning = fallback_reason
 
     analytical_intent = _effective_analytical_intent(context, steps)
+    node_sequence = [step.node for step in steps]
+    tools_invoked = resolve_tools_for_intent(analytical_intent, query_text, node_sequence)
+    operational_assumption = detect_subjective_assumption(query_text)
+
     return {
         "intent": analytical_intent,
         "context_intent": context.get("intent", "descriptive"),
@@ -376,12 +452,226 @@ def build_execution_plan(context: dict[str, Any]) -> dict[str, Any]:
         "exitpoint": steps[-1].node if steps else None,
         "planning_path": planning_path,
         "planner_reasoning": planner_reasoning,
+        "tools_invoked": tools_invoked,
+        "operational_assumption": operational_assumption,
         "execution_log": [
             {
                 "stage": "planner",
                 "path": planning_path,
                 "reason": planner_reasoning,
                 "attempts": attempts,
+                "tools_invoked": tools_invoked,
+                "operational_assumption": operational_assumption,
             }
         ],
+    }
+
+
+def _infer_target_persona(query_text: str) -> str:
+    """Map business phrasing to a persona from the segmentation tool catalog."""
+
+    text = (query_text or "").lower()
+    if any(token in text for token in ("cash advance", "overdraft", "liquidity")):
+        return "Cash-Advance Reliant"
+    if any(token in text for token in ("dormant", "inactive", "churn", "win back", "reactivat")):
+        return "Dormant / Low Activity"
+    if any(token in text for token in ("revolver", "debt", "balance transfer", "consolidat")):
+        return "The Revolvers"
+    # Premium / investment / best / top / default marketing target.
+    return "The Transactors"
+
+
+@lru_cache(maxsize=2)
+def _cached_persona_frame(dataset_path: str) -> pd.DataFrame:
+    """Cache persona-clustered frame for answer formatting."""
+
+    from backend.app.tools.segmentation import preprocess_and_cluster
+
+    result = preprocess_and_cluster(dataset_path=dataset_path)
+    return result["dataframe"]
+
+
+def _persona_frame(dataset_path: str | Path | None = None) -> pd.DataFrame:
+    path = str(Path(dataset_path) if dataset_path is not None else DEFAULT_DATASET_PATH)
+    return _cached_persona_frame(path).copy()
+
+
+def _markdown_customer_table(rows: pd.DataFrame) -> str:
+    """Render the required CUST_ID marketing sample table."""
+
+    columns = ["CUST_ID", "BALANCE", "PURCHASES", "CREDIT_LIMIT", "CREDIT_UTILIZATION"]
+    present = [column for column in columns if column in rows.columns]
+    if not present or rows.empty:
+        return "_No matching customers available for this query._"
+
+    view = rows.loc[:, present].copy()
+    if "CREDIT_UTILIZATION" in view.columns:
+        view["CREDIT_UTILIZATION"] = view["CREDIT_UTILIZATION"].map(lambda value: f"{float(value):.3f}")
+    for numeric_col in ("BALANCE", "PURCHASES", "CREDIT_LIMIT"):
+        if numeric_col in view.columns:
+            view[numeric_col] = view[numeric_col].map(lambda value: f"{float(value):,.2f}")
+
+    header = "| " + " | ".join(present) + " |"
+    separator = "| " + " | ".join("---" for _ in present) + " |"
+    body = [
+        "| " + " | ".join(str(view.iloc[index][column]) for column in present) + " |"
+        for index in range(len(view))
+    ]
+    return "\n".join([header, separator, *body])
+
+
+def _strategic_recommendation(persona: str, product: str) -> str:
+    """Persona-specific marketing guidance for the formatted answer."""
+
+    playbooks = {
+        "The Transactors": (
+            f"Prioritize premium acquisition messaging for '{persona}'. Lead with "
+            f"{product}, highlight travel/lifestyle rewards, and invite cardholders "
+            "with strong repayment behaviour into a concierge upgrade path."
+        ),
+        "The Revolvers": (
+            f"For '{persona}', lead with debt relief: position {product} as a lower-cost "
+            "exit from revolving balances, pair with autopay enrollment, and suppress "
+            "high-APR cash offers until utilization declines."
+        ),
+        "Cash-Advance Reliant": (
+            f"Engage '{persona}' with liquidity alternatives. Offer {product}, "
+            "emphasize transparent fees, and route customers away from repeated cash advances."
+        ),
+        "Dormant / Low Activity": (
+            f"Reactivate '{persona}' with low-friction nudges. Promote {product}, "
+            "use first-purchase cashback, and keep onboarding steps minimal."
+        ),
+    }
+    return playbooks.get(
+        persona,
+        f"Target the '{persona}' cohort with {product} using behaviour-aligned messaging.",
+    )
+
+
+def format_high_impact_answer(
+    context: dict[str, Any],
+    planner_output: dict[str, Any],
+    node_outputs: dict[str, Any] | None = None,
+    explanations: dict[str, Any] | None = None,
+    top_n: int = 8,
+) -> dict[str, Any]:
+    """Format the final agent answer into the required four-section structure."""
+
+    from backend.app.tools.segmentation import (
+        PERSONA_CATALOG,
+        get_customer_insight,
+        get_top_customers_for_persona,
+    )
+
+    node_outputs = node_outputs or {}
+    explanations = explanations or {}
+    query_text = str(context.get("raw_query") or context.get("normalized_query") or "")
+    analytical_intent = str(planner_output.get("intent") or context.get("intent") or "descriptive")
+    planning_path = planner_output.get("planning_path", "rule_based_fallback")
+    tools_invoked = list(
+        planner_output.get("tools_invoked")
+        or resolve_tools_for_intent(analytical_intent, query_text)
+    )
+    operational_assumption = planner_output.get("operational_assumption") or detect_subjective_assumption(
+        query_text
+    )
+
+    dataset_path = context.get("dataset_path")
+    persona = _infer_target_persona(query_text)
+    persona_meta = next(
+        (details for details in PERSONA_CATALOG.values() if details["persona"] == persona),
+        PERSONA_CATALOG[0],
+    )
+    product = persona_meta["product"]
+    sample_rows = pd.DataFrame()
+    primary_finding = ""
+
+    if analytical_intent == "descriptive":
+        eda = node_outputs.get("eda") or {}
+        missing = eda.get("missing_values") or {}
+        top_missing = sorted(missing.items(), key=lambda item: item[1], reverse=True)[:3]
+        missing_bits = ", ".join(f"{column}={count}" for column, count in top_missing) or "none material"
+        primary_finding = (
+            f"EDA complete on {eda.get('row_count', 'the')} rows / "
+            f"{eda.get('column_count', 'n')} columns. Notable null concentrations: {missing_bits}."
+        )
+        sample_rows = pd.DataFrame(eda.get("sample_rows") or [])
+    elif analytical_intent == "explanation":
+        frame = _persona_frame(dataset_path)
+        cust_id = extract_customer_id(query_text)
+        if cust_id:
+            insight = get_customer_insight(cust_id, frame)
+            persona = str(insight.get("persona") or persona)
+            product = str(insight.get("recommended_product") or product)
+            primary_finding = (
+                f"Customer {cust_id} maps to '{persona}' "
+                f"({insight.get('persona_profile')}). Recommended product: {product}."
+            )
+            sample_rows = frame[frame["CUST_ID"].astype(str) == cust_id]
+        else:
+            primary_finding = (
+                f"Segment rules center on behavioural personas. "
+                f"For this query, '{persona}' ({persona_meta['profile']}) is the matched rule set; "
+                f"recommended offer: {product}."
+            )
+            sample_rows = get_top_customers_for_persona(persona, frame, top_n=top_n)
+    else:
+        frame = _persona_frame(dataset_path)
+        sample_rows = get_top_customers_for_persona(persona, frame, top_n=top_n)
+        primary_finding = (
+            f"To address this request, target the '{persona}' persona "
+            f"({persona_meta['profile']}). Recommended product: {product}."
+        )
+
+    if operational_assumption:
+        primary_finding = f"{operational_assumption} {primary_finding}".strip()
+
+    execution_bullets = [
+        f"- Tools invoked: {', '.join(tools_invoked) if tools_invoked else 'none'}",
+        f"- Planning path: `{planning_path}`",
+        f"- Workflow: `{planner_output.get('workflow_name', analytical_intent + '_workflow')}`",
+    ]
+    if node_outputs:
+        execution_bullets.append(
+            f"- Nodes executed: {', '.join(node_outputs.keys())}"
+        )
+    if explanations.get("explainer_used"):
+        execution_bullets.append(
+            f"- Explainer: {explanations.get('explainer_used')} "
+            f"({explanations.get('explainer_reason', '')})"
+        )
+
+    strategic = _strategic_recommendation(persona, product)
+    table_markdown = _markdown_customer_table(sample_rows.head(top_n))
+
+    markdown = "\n\n".join(
+        [
+            "## 1. Query-Aware Execution Summary\n" + "\n".join(execution_bullets),
+            "## 2. Primary Finding & Persona Match\n" + primary_finding,
+            "## 3. Target Customer Table\n" + table_markdown,
+            "## 4. Strategic Marketing Recommendation\n" + strategic,
+        ]
+    )
+
+    table_records = []
+    if not sample_rows.empty:
+        export_cols = [
+            column
+            for column in ["CUST_ID", "BALANCE", "PURCHASES", "CREDIT_LIMIT", "CREDIT_UTILIZATION"]
+            if column in sample_rows.columns
+        ]
+        table_records = sample_rows.loc[:, export_cols].head(top_n).to_dict(orient="records")
+
+    return {
+        "markdown": markdown,
+        "execution_summary": execution_bullets,
+        "primary_finding": primary_finding,
+        "target_customers": table_records,
+        "strategic_recommendation": strategic,
+        "persona": persona,
+        "recommended_product": product,
+        "tools_invoked": tools_invoked,
+        "operational_assumption": operational_assumption,
+        "planning_path": planning_path,
     }

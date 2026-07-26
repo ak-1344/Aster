@@ -184,6 +184,7 @@ def list_recent(
             """
             SELECT id, query_text, query_text_normalized,
                    execution_graph_summary, chosen_algorithm,
+                   explanation_summary, response_json,
                    created_at
             FROM decision_memory
             ORDER BY created_at DESC
