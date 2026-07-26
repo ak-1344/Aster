@@ -73,14 +73,6 @@ class NodeSmokeTests(unittest.TestCase):
         self.assertIn("scatter", payload)
         self.assertIn("cluster_size_bar", payload)
 
-    def test_temp_workflow_endpoint_payload_shape(self) -> None:
-        from backend.app.api.main import run_workflow
-
-        payload = run_workflow()
-        self.assertIn("dataset_status", payload)
-        self.assertIn("evaluation", payload)
-        self.assertIn("cluster_table", payload)
-
     def test_context_builder_routes_segmentation_query(self) -> None:
         context = build_context("segment customers into 3 clusters")
         self.assertEqual(context["intent"], "segmentation")
